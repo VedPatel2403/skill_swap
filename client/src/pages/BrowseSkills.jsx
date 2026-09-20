@@ -117,29 +117,6 @@ const BrowseSkills = () => {
         </p>
       </div>
 
-      {firestoreHealth.permissionDenied && (
-        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
-          <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-          <div className="space-y-1">
-            <p className="font-bold text-amber-950">
-              Firebase Cloud Firestore Notice for Live Multi-Device Sync:
-            </p>
-            <p className="text-amber-800 leading-relaxed font-normal">
-              Firestore database exists on <code>skill-swap-f29e2</code>. To allow real-time cross-device updates, open{' '}
-              <a
-                href="https://console.firebase.google.com/project/skill-swap-f29e2/firestore/rules"
-                target="_blank"
-                rel="noreferrer"
-                className="underline font-bold text-[#E05504] hover:text-[#FAA121]"
-              >
-                Firebase Console &gt; Firestore Database &gt; Rules
-              </a>{' '}
-              and set <code>allow read, write: if true;</code> then click <strong>Publish</strong>.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Neomorphic Search & Filter Controls */}
       <div className="neo-card p-5 space-y-4">
         {/* Search input bar */}

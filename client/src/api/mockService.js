@@ -1,5 +1,5 @@
 // Complete Standalone Mock Service for GitHub Pages / Static Hosting
-import { pullCloudStore, pushCloudStore, mergeCloudIntoLocal, deleteCloudSkill, getFirestoreHealth } from './cloudSync.js';
+import { pullCloudStore, pushCloudStore, mergeCloudIntoLocal, deleteCloudSkill, getFirestoreHealth, pushSingleSkillToCloud, pushUserProfileToCloud } from './cloudSync.js';
 
 const DEFAULT_USERS = [
   {
@@ -673,7 +673,20 @@ export async function handleMockRequest(config) {
         sessionStorage.setItem('skillswap_user', JSON.stringify(user));
       } catch (e) {}
 
-      // Sync update to Cloud Store
+      // Sync update to Cloud Store & Firestore
+      if (updatedItem) {
+        pushSingleSkillToCloud({
+          ...updatedItem,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            avatar: user.avatar,
+            location: user.location,
+            isPublic: user.isPublic !== false
+          }
+        });
+      }
       try {
         pullCloudStore().then(cloudData => {
           const updatedSkills = (cloudData.skills || []).map(s => s.id === skillId ? { ...s, ...body } : s);
@@ -867,6 +880,10 @@ export async function handleMockRequest(config) {
       localStorage.setItem('skillswap_user', JSON.stringify(target));
       sessionStorage.setItem('skillswap_user', JSON.stringify(target));
     } catch (e) {}
+
+    // Automatically sync profile updates to Cloud Firestore across all devices
+    pushUserProfileToCloud(target);
+
     return ok({ success: true, user: target });
   }
 

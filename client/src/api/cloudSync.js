@@ -130,6 +130,64 @@ export async function pushCloudStore(data) {
 }
 
 /**
+ * Automatically sync a single skill to Cloud Firestore
+ */
+export async function pushSingleSkillToCloud(skill) {
+  if (!db || !skill) return;
+  try {
+    const docId = String(skill.id || Date.now());
+    const cleanSkill = sanitizeForFirestore(skill);
+    await setDoc(doc(db, 'skills', docId), cleanSkill);
+    if (cachedCloud && Array.isArray(cachedCloud.skills)) {
+      const filtered = cachedCloud.skills.filter(s => String(s.id) !== docId);
+      cachedCloud.skills = [cleanSkill, ...filtered];
+    }
+  } catch (e) {
+    console.warn('pushSingleSkillToCloud error:', e);
+  }
+}
+
+/**
+ * Automatically sync user profile changes to Cloud Firestore and update all their skills
+ */
+export async function pushUserProfileToCloud(user) {
+  if (!db || !user) return;
+  try {
+    const docId = String(user.id || user.email || Date.now());
+    const cleanUser = sanitizeForFirestore(user);
+    await setDoc(doc(db, 'users', docId), cleanUser);
+
+    // Also update any skills owned by this user in Firestore so their new name/avatar/location is updated everywhere
+    try {
+      const userSkillsSnap = await getDocs(collection(db, 'skills'));
+      userSkillsSnap.forEach(d => {
+        const skillData = d.data();
+        if (
+          String(skillData.userId) === String(user.id) ||
+          String(skillData.user?.id) === String(user.id) ||
+          (skillData.user?.email && user.email && skillData.user.email.toLowerCase() === user.email.toLowerCase())
+        ) {
+          const updatedSkill = {
+            ...skillData,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              avatar: user.avatar,
+              location: user.location,
+              isPublic: user.isPublic !== false
+            }
+          };
+          setDoc(doc(db, 'skills', d.id), sanitizeForFirestore(updatedSkill)).catch(() => {});
+        }
+      });
+    } catch (e) {}
+  } catch (e) {
+    console.warn('pushUserProfileToCloud error:', e);
+  }
+}
+
+/**
  * Delete a skill from Cloud Firestore
  */
 export async function deleteCloudSkill(skillId) {
