@@ -78,6 +78,10 @@ export async function pullCloudStore() {
         swaps: []
       };
       lastFetchTimestamp = now;
+
+      // Automatically sync any locally created skills (like ved2222) to Firestore in the background
+      syncLocalSkillsToCloud().catch(() => {});
+
       return cachedCloud;
     } catch (fsErr) {
       if (fsErr.code === 'permission-denied') {
@@ -136,6 +140,68 @@ export async function deleteCloudSkill(skillId) {
     try {
       await deleteDoc(doc(db, 'skills', String(skillId)));
     } catch (e) {}
+  }
+}
+
+/**
+ * Push all local custom skills and profiles to Cloud Firestore
+ */
+export async function syncLocalSkillsToCloud() {
+  if (!db) return { success: false, error: 'Database not initialized' };
+  try {
+    let rawUsers = null;
+    if (typeof localStorage !== 'undefined') {
+      rawUsers = localStorage.getItem('skillswap_mock_users');
+    }
+    if (!rawUsers) return { success: true, count: 0 };
+    const users = JSON.parse(rawUsers);
+    if (!Array.isArray(users)) return { success: true, count: 0 };
+
+    const skillsToPush = [];
+    users.forEach(u => {
+      if (u.isBanned) return;
+      ['skillsOffered', 'skillsWanted', 'skills'].forEach(k => {
+        if (Array.isArray(u[k])) {
+          u[k].forEach(s => {
+            if (s && s.title) {
+              skillsToPush.push({
+                ...s,
+                user: {
+                  id: u.id,
+                  name: u.name,
+                  email: u.email,
+                  avatar: u.avatar,
+                  location: u.location,
+                  isPublic: u.isPublic !== false
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+
+    if (skillsToPush.length === 0) return { success: true, count: 0 };
+
+    for (const s of skillsToPush) {
+      const docId = String(s.id || Date.now());
+      const clean = sanitizeForFirestore(s);
+      await setDoc(doc(db, 'skills', docId), clean);
+    }
+
+    for (const u of users) {
+      const docId = String(u.id || u.email || Date.now());
+      const cleanUser = sanitizeForFirestore(u);
+      await setDoc(doc(db, 'users', docId), cleanUser);
+    }
+
+    firestoreHealth = { active: true, permissionDenied: false, lastChecked: Date.now() };
+    return { success: true, count: skillsToPush.length };
+  } catch (err) {
+    if (err?.code === 'permission-denied') {
+      firestoreHealth = { active: false, permissionDenied: true, lastChecked: Date.now() };
+    }
+    return { success: false, permissionDenied: err?.code === 'permission-denied', error: err?.code || err?.message };
   }
 }
 

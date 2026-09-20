@@ -23,11 +23,15 @@ import {
   UserCheck,
   ArrowLeftRight,
   Star,
-  User as UserIcon
+  User as UserIcon,
+  Cloud,
+  CloudUpload,
+  ShieldAlert
 } from 'lucide-react';
 import api from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
+import { syncLocalSkillsToCloud, getFirestoreHealth } from '../api/cloudSync';
 
 const MyProfile = () => {
   const { user, refreshUser, updateUser } = useAuth();
@@ -62,6 +66,46 @@ const MyProfile = () => {
   const [infoSuccess, setInfoSuccess] = useState('');
   const [infoError, setInfoError] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
+
+  // Cloud Firestore Sync State
+  const [firestoreHealth, setFirestoreHealth] = useState(getFirestoreHealth());
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState(null);
+
+  const handleManualCloudSync = async () => {
+    setIsSyncingCloud(true);
+    setSyncFeedback(null);
+    try {
+      const res = await syncLocalSkillsToCloud();
+      const updatedHealth = getFirestoreHealth();
+      setFirestoreHealth(updatedHealth);
+      if (res.success) {
+        setSyncFeedback({
+          type: 'success',
+          message: `All your local skills (including your newly listed skills) have been uploaded to Cloud Firestore! Visible to all other devices & accounts now.`
+        });
+        window.dispatchEvent(new CustomEvent('skillswap:profile-updated'));
+      } else {
+        setSyncFeedback({
+          type: 'error',
+          message: res.permissionDenied
+            ? 'Firebase rejected write access (Permission Denied). Please open Firebase Console (Firestore > Rules), set "allow read, write: if true;", click Publish, then click Sync again.'
+            : (res.error || 'Failed to sync with cloud.')
+        });
+      }
+    } catch (e) {
+      setSyncFeedback({ type: 'error', message: e.message || 'Sync failed.' });
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  useEffect(() => {
+    // Automatically trigger cloud sync on profile load
+    syncLocalSkillsToCloud().then(() => {
+      setFirestoreHealth(getFirestoreHealth());
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -694,6 +738,66 @@ const MyProfile = () => {
 
         {/* Right Column: Separate Lists for Skills Offered & Skills Wanted */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Cloud Synchronization Status Banner */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            firestoreHealth.permissionDenied
+              ? 'bg-amber-50/90 border-amber-200 text-amber-900 shadow-sm'
+              : 'bg-emerald-50/90 border-emerald-200 text-emerald-900 shadow-sm'
+          }`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                {firestoreHealth.permissionDenied ? (
+                  <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <Cloud className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <h4 className="text-xs font-bold text-stone-900">
+                    {firestoreHealth.permissionDenied
+                      ? 'Cross-Device Multi-Cloud Sync Notice'
+                      : 'Real-Time Cloud Firestore Sync Active'}
+                  </h4>
+                  <p className="text-[11px] leading-relaxed mt-0.5 text-stone-600">
+                    {firestoreHealth.permissionDenied
+                      ? 'Skills added on this device (like "ved2222") need Firestore security rules published in Firebase Console to appear on other devices.'
+                      : 'All skills offered and wanted are synchronized across all connected devices and browsers.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {firestoreHealth.permissionDenied && (
+                  <a
+                    href="https://console.firebase.google.com/project/skill-swap-f29e2/firestore/rules"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 neo-btn text-[11px] font-bold text-amber-900 hover:text-amber-700 inline-flex items-center gap-1 rounded-xl"
+                  >
+                    <span>Firebase Rules</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={handleManualCloudSync}
+                  disabled={isSyncingCloud}
+                  className="px-3.5 py-1.5 neo-btn-primary text-[11px] font-bold rounded-xl flex items-center gap-1.5"
+                  title="Upload all your locally listed skills to Cloud Firestore"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingCloud ? 'Syncing...' : 'Sync Skills to Cloud'}</span>
+                </button>
+              </div>
+            </div>
+            {syncFeedback && (
+              <div className={`mt-3 p-2.5 rounded-xl text-xs font-medium ${
+                syncFeedback.type === 'success'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-rose-100 text-rose-800 border border-rose-300'
+              }`}>
+                {syncFeedback.message}
+              </div>
+            )}
+          </div>
+
           {/* 1. Skills Offered List */}
           <div className="neo-card p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#F0ECC7]">
