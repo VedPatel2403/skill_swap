@@ -35,8 +35,8 @@ exports.getAllSkills = async (req, res) => {
           model: User,
           as: 'user',
           where: {
-            isPublic: true,
-            isBanned: false
+            isBanned: false,
+            [Op.or]: [{ isPublic: true }, { isPublic: null }]
           },
           attributes: ['id', 'name', 'location', 'avatar', 'availability', 'isPublic'],
           include: [

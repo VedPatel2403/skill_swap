@@ -27,6 +27,10 @@ const Home = () => {
       }
     };
     fetchFeatured();
+
+    const handleUpdate = () => fetchFeatured();
+    window.addEventListener('skillswap:profile-updated', handleUpdate);
+    return () => window.removeEventListener('skillswap:profile-updated', handleUpdate);
   }, []);
 
   const handleSearchSubmit = (e) => {

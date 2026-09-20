@@ -46,7 +46,7 @@ const AdminDashboard = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [statsRes, usersRes, skillsRes, swapsRes, bcRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get('/admin/stats'),
         api.get('/admin/users'),
         api.get('/admin/skills'),
@@ -54,11 +54,23 @@ const AdminDashboard = () => {
         api.get('/admin/broadcasts')
       ]);
 
-      setStats(statsRes.data);
-      setUsers(usersRes.data || []);
-      setSkills(skillsRes.data || []);
-      setSwaps(swapsRes.data || []);
-      setBroadcasts(bcRes.data || []);
+      const [statsRes, usersRes, skillsRes, swapsRes, bcRes] = results;
+
+      if (statsRes.status === 'fulfilled' && statsRes.value?.data) {
+        setStats(statsRes.value.data);
+      }
+      if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value?.data)) {
+        setUsers(usersRes.value.data);
+      }
+      if (skillsRes.status === 'fulfilled' && Array.isArray(skillsRes.value?.data)) {
+        setSkills(skillsRes.value.data);
+      }
+      if (swapsRes.status === 'fulfilled' && Array.isArray(swapsRes.value?.data)) {
+        setSwaps(swapsRes.value.data);
+      }
+      if (bcRes.status === 'fulfilled' && Array.isArray(bcRes.value?.data)) {
+        setBroadcasts(bcRes.value.data);
+      }
     } catch (err) {
       console.error('Error loading admin dashboard data:', err);
     } finally {
@@ -183,28 +195,31 @@ const AdminDashboard = () => {
   };
 
   const filteredUsers = users.filter((u) => {
+    if (!u) return false;
     if (!userSearch.trim()) return true;
     const q = userSearch.toLowerCase();
     return (
-      u.name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q) ||
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
       (u.location && u.location.toLowerCase().includes(q))
     );
   });
 
   const filteredSkills = skills.filter((s) => {
-    const matchesStatus = skillStatusFilter === 'All' || s.status === skillStatusFilter;
+    if (!s) return false;
+    const matchesStatus = skillStatusFilter === 'All' || (s.status || 'active') === skillStatusFilter;
     if (!matchesStatus) return false;
     if (!skillSearch.trim()) return true;
     const q = skillSearch.toLowerCase();
     return (
-      s.title.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q) ||
-      s.category.toLowerCase().includes(q)
+      (s.title || '').toLowerCase().includes(q) ||
+      (s.description || '').toLowerCase().includes(q) ||
+      (s.category || '').toLowerCase().includes(q)
     );
   });
 
   const filteredSwaps = swaps.filter((s) => {
+    if (!s) return false;
     if (swapStatusFilter === 'All') return true;
     return s.status === swapStatusFilter;
   });
@@ -275,41 +290,41 @@ const AdminDashboard = () => {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="neo-card p-4">
               <span className="text-xs font-semibold text-stone-500 block mb-1">Total Users</span>
-              <span className="text-2xl font-black text-stone-900">{stats?.metrics?.totalUsers || 0}</span>
+              <span className="text-2xl font-black text-stone-900">{stats?.metrics?.totalUsers ?? stats?.totalUsers ?? users.length ?? 0}</span>
               <span className="text-[11px] text-stone-400 block mt-1 font-medium">
-                {stats?.metrics?.bannedUsers || 0} suspended
+                {stats?.metrics?.bannedUsers ?? stats?.bannedUsers ?? users.filter(u => u?.isBanned).length ?? 0} suspended
               </span>
             </div>
 
             <div className="neo-card p-4">
               <span className="text-xs font-semibold text-stone-500 block mb-1">Total Skills</span>
-              <span className="text-2xl font-black text-stone-900">{stats?.metrics?.totalSkills || 0}</span>
+              <span className="text-2xl font-black text-stone-900">{stats?.metrics?.totalSkills ?? stats?.totalSkills ?? skills.length ?? 0}</span>
               <span className="text-[11px] text-[#166534] block mt-1 font-semibold">
-                {stats?.metrics?.activeSkills || 0} active
+                {stats?.metrics?.activeSkills ?? stats?.activeSkills ?? skills.filter(s => (s?.status || 'active') === 'active').length ?? 0} active
               </span>
             </div>
 
             <div className="neo-card p-4">
               <span className="text-xs font-semibold text-stone-500 block mb-1">Pending Swaps</span>
-              <span className="text-2xl font-black text-[#FAA121]">{stats?.metrics?.pendingSwaps || 0}</span>
+              <span className="text-2xl font-black text-[#FAA121]">{stats?.metrics?.pendingSwaps ?? stats?.pendingSwaps ?? swaps.filter(s => s?.status === 'pending').length ?? 0}</span>
               <span className="text-[11px] text-stone-400 block mt-1 font-medium">Awaiting acceptance</span>
             </div>
 
             <div className="neo-card p-4">
               <span className="text-xs font-semibold text-stone-500 block mb-1">Active Swaps</span>
-              <span className="text-2xl font-black text-[#E05504]">{stats?.metrics?.acceptedSwaps || 0}</span>
+              <span className="text-2xl font-black text-[#E05504]">{stats?.metrics?.acceptedSwaps ?? stats?.acceptedSwaps ?? stats?.activeSwaps ?? swaps.filter(s => s?.status === 'accepted').length ?? 0}</span>
               <span className="text-[11px] text-slate-400 block mt-1 font-medium">In collaboration</span>
             </div>
 
             <div className="neo-card p-4">
               <span className="text-xs font-semibold text-slate-500 block mb-1">Completed Swaps</span>
-              <span className="text-2xl font-black text-emerald-600">{stats?.metrics?.completedSwaps || 0}</span>
+              <span className="text-2xl font-black text-emerald-600">{stats?.metrics?.completedSwaps ?? stats?.completedSwaps ?? swaps.filter(s => s?.status === 'completed').length ?? 0}</span>
               <span className="text-[11px] text-slate-400 block mt-1 font-medium">Verified exchanges</span>
             </div>
 
             <div className="neo-card p-4">
               <span className="text-xs font-semibold text-slate-500 block mb-1">Reviews Logged</span>
-              <span className="text-2xl font-black text-slate-900">{stats?.metrics?.totalRatings || 0}</span>
+              <span className="text-2xl font-black text-slate-900">{stats?.metrics?.totalRatings ?? stats?.totalRatings ?? stats?.totalReviews ?? 0}</span>
               <span className="text-[11px] text-slate-400 block mt-1 font-medium">Feedback entries</span>
             </div>
           </div>

@@ -30,8 +30,8 @@ exports.getPublicUsers = async (req, res) => {
     const { search, availability, category } = req.query;
 
     const whereClause = {
-      isPublic: true,
-      isBanned: false
+      isBanned: false,
+      [Op.or]: [{ isPublic: true }, { isPublic: null }]
     };
 
     if (availability) {

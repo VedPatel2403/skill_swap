@@ -245,6 +245,15 @@ export async function handleMockRequest(config) {
   }
   if (!currentUser) {
     currentUser = users[1]; // fallback to Alex Rivera
+  } else {
+    // Ensure currentUser is present in users array so any profile changes and new skills persist
+    const existingIdx = users.findIndex(u => String(u.id) === String(currentUser.id) || (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
+    if (existingIdx === -1) {
+      users.push(currentUser);
+      setStored('users', users);
+    } else {
+      currentUser = users[existingIdx];
+    }
   }
 
   // Helper to package response
@@ -252,7 +261,26 @@ export async function handleMockRequest(config) {
 
   // 1. GET /auth/demo-accounts
   if (url.includes('/auth/demo-accounts')) {
-    return ok(users);
+    // Only return the single demo account (Alex Rivera), restoring clean 1 demo account behavior
+    const demo = users.find(u => u.isDemo || u.email === 'alex@example.com') || users[1];
+    const results = [demo];
+    try {
+      const qIndex = url.indexOf('?');
+      if (qIndex !== -1) {
+        const params = new URLSearchParams(url.substring(qIndex));
+        const idsParam = params.get('ids');
+        if (idsParam) {
+          const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean);
+          ids.forEach(id => {
+            const found = users.find(u => String(u.id) === String(id));
+            if (found && !results.some(r => String(r.id) === String(found.id))) {
+              results.push(found);
+            }
+          });
+        }
+      }
+    } catch (e) {}
+    return ok(results);
   }
 
   // 2. POST /auth/demo-login
@@ -450,24 +478,41 @@ export async function handleMockRequest(config) {
 
   // 9. POST /skills
   if (url === '/skills' && method === 'post') {
-    const user = users.find(u => String(u.id) === String(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser;
+    let userIndex = users.findIndex(u => String(u.id) === String(currentUser.id) || (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
+    let user;
+    if (userIndex === -1) {
+      user = {
+        ...currentUser,
+        id: currentUser.id || Date.now(),
+        isPublic: currentUser.isPublic !== false,
+        isBanned: false,
+        skillsOffered: currentUser.skillsOffered || [],
+        skillsWanted: currentUser.skillsWanted || []
+      };
+      users.push(user);
+      userIndex = users.length - 1;
+    } else {
+      user = users[userIndex];
+    }
+
     const newSkill = {
       id: Date.now(),
       userId: user.id,
       title: (body.title || 'New Skill').trim(),
-      category: body.category || 'Programming',
+      category: body.category || 'Technology',
       type: body.type || 'offered',
       proficiency: body.proficiency || 'Intermediate',
       description: (body.description || '').trim(),
+      status: 'active',
       createdAt: new Date().toISOString()
     };
     if (newSkill.type === 'offered') {
       user.skillsOffered = user.skillsOffered || [];
-      const filtered = user.skillsOffered.filter(s => s.title.toLowerCase() !== newSkill.title.toLowerCase());
+      const filtered = user.skillsOffered.filter(s => (s.title || '').toLowerCase() !== newSkill.title.toLowerCase());
       user.skillsOffered = [newSkill, ...filtered];
     } else {
       user.skillsWanted = user.skillsWanted || [];
-      const filtered = user.skillsWanted.filter(s => s.title.toLowerCase() !== newSkill.title.toLowerCase());
+      const filtered = user.skillsWanted.filter(s => (s.title || '').toLowerCase() !== newSkill.title.toLowerCase());
       user.skillsWanted = [newSkill, ...filtered];
     }
     setStored('users', users);
@@ -641,22 +686,36 @@ export async function handleMockRequest(config) {
   // 17. GET /users/:id
   if (url.startsWith('/users/') && method === 'get') {
     const parts = url.split('/');
-    const id = parseInt(parts[2]);
-    const target = users.find(u => u.id === id) || users[1];
-    return ok(target);
+    const id = parts[2];
+    const target = users.find(u => String(u.id) === String(id) || (u.email && id && u.email.toLowerCase() === id.toLowerCase())) || users[1];
+    const uniqueSkills = [...(target.skillsOffered || []), ...(target.skillsWanted || [])];
+    const completedSwapsCount = swaps.filter(s => (String(s.requesterId) === String(target.id) || String(s.recipientId) === String(target.id)) && s.status === 'completed').length;
+    return ok({
+      ...target,
+      skills: uniqueSkills,
+      skillsOffered: target.skillsOffered || [],
+      skillsWanted: target.skillsWanted || [],
+      completedSwapsCount,
+      ratingCount: (target.ratings || []).length,
+      averageRating: 4.9
+    });
   }
 
   // 18. PUT /users/profile
   if (url.includes('/users/profile') && method === 'put') {
-    const target = users.find(u => u.id === currentUser.id);
-    if (target) {
+    let target = users.find(u => String(u.id) === String(currentUser.id) || (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()));
+    if (!target) {
+      target = { ...currentUser, ...body };
+      users.push(target);
+    } else {
       Object.assign(target, body);
-      setStored('users', users);
+    }
+    setStored('users', users);
+    try {
       localStorage.setItem('skillswap_user', JSON.stringify(target));
       sessionStorage.setItem('skillswap_user', JSON.stringify(target));
-      return ok({ success: true, user: target });
-    }
-    return ok({ success: true, user: currentUser });
+    } catch (e) {}
+    return ok({ success: true, user: target });
   }
 
   // 19. DELETE /users/:id
@@ -676,16 +735,44 @@ export async function handleMockRequest(config) {
   // 21. Admin suite endpoints
   if (url.includes('/admin/stats')) {
     let totalSkills = 0;
+    let activeSkills = 0;
     users.forEach(u => {
-      totalSkills += (u.skillsOffered || []).length + (u.skillsWanted || []).length;
+      const offered = u.skillsOffered || [];
+      const wanted = u.skillsWanted || [];
+      totalSkills += offered.length + wanted.length;
+      activeSkills += offered.filter(s => (s.status || 'active') === 'active').length + wanted.filter(s => (s.status || 'active') === 'active').length;
     });
-    return ok({
+    const bannedUsers = users.filter(u => u.isBanned).length;
+    const pendingSwaps = swaps.filter(s => s.status === 'pending').length;
+    const acceptedSwaps = swaps.filter(s => s.status === 'accepted').length;
+    const completedSwaps = swaps.filter(s => s.status === 'completed').length;
+    const cancelledSwaps = swaps.filter(s => s.status === 'rejected' || s.status === 'cancelled').length;
+
+    const metrics = {
       totalUsers: users.length,
-      activeSkills: totalSkills,
-      pendingSwaps: swaps.filter(s => s.status === 'pending').length,
-      activeSwaps: swaps.filter(s => s.status === 'accepted').length,
-      completedSwaps: swaps.filter(s => s.status === 'completed').length,
-      totalReviews: 8
+      bannedUsers,
+      totalSkills,
+      activeSkills,
+      flaggedSkills: totalSkills - activeSkills,
+      totalSwaps: swaps.length,
+      pendingSwaps,
+      acceptedSwaps,
+      completedSwaps,
+      cancelledSwaps,
+      totalRatings: 12,
+      activeBroadcasts: broadcasts.filter(b => b.isActive).length
+    };
+
+    const recentLogs = [
+      { id: 1, action: 'PLATFORM_MONITOR', details: 'Automated health verification passed', createdAt: new Date(Date.now() - 3600000).toISOString() },
+      { id: 2, action: 'CONTENT_AUDIT', details: 'Active listings integrity check complete', createdAt: new Date(Date.now() - 7200000).toISOString() },
+      { id: 3, action: 'ADMIN_SESSION', details: 'Administrator verified command console', createdAt: new Date(Date.now() - 10800000).toISOString() }
+    ];
+
+    return ok({
+      metrics,
+      recentLogs,
+      ...metrics
     });
   }
   if (url.includes('/admin/users')) {
@@ -694,10 +781,51 @@ export async function handleMockRequest(config) {
   if (url.includes('/admin/skills')) {
     let list = [];
     users.forEach(u => {
-      (u.skillsOffered || []).forEach(s => list.push({ ...s, user: u }));
-      (u.skillsWanted || []).forEach(s => list.push({ ...s, user: u }));
+      (u.skillsOffered || []).forEach(s => list.push({
+        ...s,
+        status: s.status || 'active',
+        category: s.category || 'Technology',
+        description: s.description || '',
+        title: s.title || 'Untitled Skill',
+        type: s.type || 'offered',
+        user: { id: u.id, name: u.name, email: u.email, avatar: u.avatar }
+      }));
+      (u.skillsWanted || []).forEach(s => list.push({
+        ...s,
+        status: s.status || 'active',
+        category: s.category || 'Technology',
+        description: s.description || '',
+        title: s.title || 'Untitled Skill',
+        type: s.type || 'wanted',
+        user: { id: u.id, name: u.name, email: u.email, avatar: u.avatar }
+      }));
     });
     return ok(list);
+  }
+  if (url.includes('/admin/skills/') && url.includes('/moderate')) {
+    const sId = parseInt(url.split('/')[3]);
+    let modSkill = null;
+    users.forEach(u => {
+      ['skillsOffered', 'skillsWanted'].forEach(key => {
+        const found = (u[key] || []).find(s => s.id === sId);
+        if (found) {
+          found.status = body.status;
+          found.moderationReason = body.reason;
+          modSkill = found;
+        }
+      });
+    });
+    setStored('users', users);
+    return ok({ success: true, skill: modSkill });
+  }
+  if (url.includes('/admin/skills/') && method === 'delete') {
+    const sId = parseInt(url.split('/')[3]);
+    users.forEach(u => {
+      u.skillsOffered = (u.skillsOffered || []).filter(s => s.id !== sId);
+      u.skillsWanted = (u.skillsWanted || []).filter(s => s.id !== sId);
+    });
+    setStored('users', users);
+    return ok({ success: true });
   }
   if (url.includes('/admin/swaps')) {
     return ok(swaps);
