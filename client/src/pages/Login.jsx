@@ -71,7 +71,7 @@ const Login = () => {
       } else if (err.code === 'auth/internal-error') {
         setError('Google popup encountered an error. Please ensure popups and third-party cookies are allowed for localhost, or enter your credentials below.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setError('This domain is not authorized in Firebase Console. Please access via http://localhost:3000.');
+        setError("Firebase domain authorization required for Google login on this URL. Please add 'vedpatel2403.github.io' in Firebase Console > Authentication > Settings > Authorized Domains, or sign in directly with email/1-click below!");
       } else {
         setError(err.response?.data?.error || err.message || 'Google sign-in failed.');
       }
@@ -166,9 +166,33 @@ const Login = () => {
         )}
 
         {error && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium space-y-2.5">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
+            {error.includes('Firebase') && (
+              <div className="pt-2 border-t border-rose-200/60 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('patelvedb2403@gmail.com');
+                    setPassword('adminpassword123');
+                    login('patelvedb2403@gmail.com', 'adminpassword123').then(() => navigate('/swaps'));
+                  }}
+                  className="px-2.5 py-1.5 bg-[#E05504] text-white rounded-lg font-bold text-[11px] hover:bg-[#c24a04] transition-colors cursor-pointer"
+                >
+                  Sign In as Admin (patelvedb2403@gmail.com)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDemoClick('alex@example.com')}
+                  className="px-2.5 py-1.5 bg-stone-700 text-white rounded-lg font-bold text-[11px] hover:bg-stone-800 transition-colors cursor-pointer"
+                >
+                  Sign In as Demo (alex@example.com)
+                </button>
+              </div>
+            )}
           </div>
         )}
 

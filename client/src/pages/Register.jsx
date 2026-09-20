@@ -36,7 +36,7 @@ const Register = () => {
       } else if (err.code === 'auth/internal-error') {
         setError('Google popup encountered an error. Please ensure popups and third-party cookies are allowed for localhost, or enter your credentials below.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setError('This domain is not authorized in Firebase Console. Please access via http://localhost:3000.');
+        setError("Firebase domain authorization required for Google login on this URL. Please add 'vedpatel2403.github.io' in Firebase Console > Authentication > Settings > Authorized Domains, or register with email below!");
       } else {
         setError(err.response?.data?.error || err.message || 'Google sign-in failed.');
       }

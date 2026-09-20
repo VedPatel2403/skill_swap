@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { handleMockRequest } from './mockService';
 
 const apiBase = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api`
@@ -22,13 +23,25 @@ api.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Response interceptor to handle token expiry or ban
+// Response interceptor to handle token expiry or fallback to client mock when backend is offline
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    // If backend is offline or on static hosting without a remote API
+    const isOfflineOrNotFound = !error.response || error.response.status === 404 || error.code === 'ERR_NETWORK';
+    if (isOfflineOrNotFound && error.config && !error.config._retryMock) {
+      try {
+        error.config._retryMock = true;
+        const mockRes = await handleMockRequest(error.config);
+        return mockRes;
+      } catch (mockErr) {
+        console.error('Mock fallback error:', mockErr);
+      }
+    }
+
     if (error.response && error.response.status === 401) {
       // Clear token if expired/invalid
-      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+      if (!window.location.hash.includes('/login') && !window.location.hash.includes('/register')) {
         sessionStorage.removeItem('skillswap_token');
         sessionStorage.removeItem('skillswap_user');
         localStorage.removeItem('skillswap_token');
