@@ -1,34 +1,47 @@
 // Global Cloud Synchronization Service for Cross-Device and Cross-Account Visibility
-// Connects static GitHub Pages instances across all devices to shared cloud storage
+// Connects static GitHub Pages instances across all devices to Firebase Firestore and shared cloud storage
+import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import app from '../config/firebase.js';
 
-const CLOUD_ENDPOINTS = [
-  'https://api.restful-api.dev/objects/ff808181a09d98f701a0bebbe4535223',
-  'https://api.restful-api.dev/objects/ff808181a09d98f701a0bebc12465224'
-];
+let db = null;
+try {
+  db = getFirestore(app);
+} catch (e) {
+  console.warn('Firestore initialization notice:', e);
+}
+
+let firestoreHealth = {
+  active: false,
+  permissionDenied: false,
+  lastChecked: 0
+};
 
 let cachedCloud = null;
 let lastFetchTimestamp = 0;
-const CACHE_TTL_MS = 2500; // 2.5 second cache to prevent redundant HTTP requests
+const CACHE_TTL_MS = 2000; // 2 second cache to prevent redundant HTTP reads
 
-// Fetch helper with timeout to ensure UI is never delayed
-async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
-  if (typeof AbortController === 'undefined') {
-    return fetch(url, options);
+/**
+ * Remove any undefined properties recursively because Firestore rejects undefined values
+ */
+function sanitizeForFirestore(obj) {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore).filter(v => v !== undefined);
+  const clean = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = sanitizeForFirestore(value);
+    }
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timer);
-    return res;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+  return clean;
+}
+
+export function getFirestoreHealth() {
+  return firestoreHealth;
 }
 
 /**
- * Pull latest community skills and users from the cloud
+ * Pull latest community skills and users from Cloud Firestore
  */
 export async function pullCloudStore() {
   const now = Date.now();
@@ -36,25 +49,44 @@ export async function pullCloudStore() {
     return cachedCloud;
   }
 
-  for (const endpoint of CLOUD_ENDPOINTS) {
+  // 1. Prioritize real Firebase Cloud Firestore
+  if (db) {
     try {
-      const res = await fetchWithTimeout(endpoint, {
-        headers: { 'Accept': 'application/json' }
-      }, 2500);
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.data) {
-          cachedCloud = {
-            skills: Array.isArray(json.data.skills) ? json.data.skills : [],
-            users: Array.isArray(json.data.users) ? json.data.users : [],
-            swaps: Array.isArray(json.data.swaps) ? json.data.swaps : []
-          };
-          lastFetchTimestamp = now;
-          return cachedCloud;
+      const snap = await getDocs(collection(db, 'skills'));
+      const firestoreSkills = [];
+      snap.forEach(d => {
+        firestoreSkills.push({ id: d.id, ...d.data() });
+      });
+
+      let firestoreUsers = [];
+      try {
+        const uSnap = await getDocs(collection(db, 'users'));
+        if (uSnap && !uSnap.empty) {
+          uSnap.forEach(d => firestoreUsers.push({ id: d.id, ...d.data() }));
         }
+      } catch (e) {}
+
+      firestoreHealth = {
+        active: true,
+        permissionDenied: false,
+        lastChecked: now
+      };
+
+      cachedCloud = {
+        skills: firestoreSkills,
+        users: firestoreUsers,
+        swaps: []
+      };
+      lastFetchTimestamp = now;
+      return cachedCloud;
+    } catch (fsErr) {
+      if (fsErr.code === 'permission-denied') {
+        firestoreHealth = {
+          active: false,
+          permissionDenied: true,
+          lastChecked: now
+        };
       }
-    } catch (e) {
-      // Try next endpoint on error/timeout
     }
   }
 
@@ -62,7 +94,7 @@ export async function pullCloudStore() {
 }
 
 /**
- * Asynchronously save updated community skills to the cloud store
+ * Asynchronously save updated community skills to Firebase Cloud Firestore
  */
 export async function pushCloudStore(data) {
   cachedCloud = {
@@ -72,27 +104,77 @@ export async function pushCloudStore(data) {
   };
   lastFetchTimestamp = Date.now();
 
-  const payload = {
-    name: 'SkillSwap Production Cloud Sync Store',
-    data: {
-      version: 1,
-      updatedAt: Date.now(),
-      skills: cachedCloud.skills,
-      users: cachedCloud.users,
-      swaps: cachedCloud.swaps
-    }
-  };
+  // 1. Sync to real Firebase Cloud Firestore
+  if (db) {
+    try {
+      (cachedCloud.skills || []).forEach(s => {
+        const docId = String(s.id || Date.now());
+        const cleanSkill = sanitizeForFirestore(s);
+        setDoc(doc(db, 'skills', docId), cleanSkill).catch((err) => {
+          if (err?.code === 'permission-denied') {
+            firestoreHealth.permissionDenied = true;
+          }
+        });
+      });
+      (cachedCloud.users || []).forEach(u => {
+        const docId = String(u.id || u.email || Date.now());
+        const cleanUser = sanitizeForFirestore(u);
+        setDoc(doc(db, 'users', docId), cleanUser).catch(() => {});
+      });
+    } catch (e) {}
+  }
+}
 
-  // Push to endpoints in the background without blocking execution
-  Promise.allSettled(
-    CLOUD_ENDPOINTS.map(endpoint =>
-      fetchWithTimeout(endpoint, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }, 4000)
-    )
-  ).catch(() => {});
+/**
+ * Delete a skill from Cloud Firestore
+ */
+export async function deleteCloudSkill(skillId) {
+  if (cachedCloud && Array.isArray(cachedCloud.skills)) {
+    cachedCloud.skills = cachedCloud.skills.filter(s => String(s.id) !== String(skillId));
+  }
+  if (db) {
+    try {
+      await deleteDoc(doc(db, 'skills', String(skillId)));
+    } catch (e) {}
+  }
+}
+
+let listenerAttached = false;
+
+/**
+ * Initialize real-time listener for Firestore skills collection
+ */
+export function initFirestoreSync() {
+  if (!db || listenerAttached) return;
+  try {
+    const skillsCol = collection(db, 'skills');
+    onSnapshot(skillsCol, (snap) => {
+      firestoreHealth = { active: true, permissionDenied: false, lastChecked: Date.now() };
+      const firestoreSkills = [];
+      snap.forEach(d => {
+        firestoreSkills.push({ id: d.id, ...d.data() });
+      });
+      if (cachedCloud) {
+        cachedCloud.skills = firestoreSkills;
+      } else {
+        cachedCloud = { skills: firestoreSkills, users: [], swaps: [] };
+      }
+      lastFetchTimestamp = Date.now();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('skillswap:profile-updated'));
+      }
+    }, (err) => {
+      if (err?.code === 'permission-denied') {
+        firestoreHealth.permissionDenied = true;
+      }
+    });
+    listenerAttached = true;
+  } catch (e) {}
+}
+
+// Automatically start real-time listener on client load
+if (typeof window !== 'undefined') {
+  initFirestoreSync();
 }
 
 /**

@@ -1,5 +1,5 @@
 // Complete Standalone Mock Service for GitHub Pages / Static Hosting
-import { pullCloudStore, pushCloudStore, mergeCloudIntoLocal } from './cloudSync.js';
+import { pullCloudStore, pushCloudStore, mergeCloudIntoLocal, deleteCloudSkill, getFirestoreHealth } from './cloudSync.js';
 
 const DEFAULT_USERS = [
   {
@@ -15,10 +15,10 @@ const DEFAULT_USERS = [
     isBanned: false,
     isDemo: false,
     skillsOffered: [
-      { id: 201, title: 'Platform Governance & Systems', category: 'Technology', type: 'offered', proficiency: 'Expert', description: 'System design, code reviews, and community standards architecture.' }
+      { id: 201, title: 'Platform Governance & Systems', category: 'Programming', type: 'offered', proficiency: 'Expert', description: 'System design, code reviews, and community standards architecture.' }
     ],
     skillsWanted: [
-      { id: 202, title: 'Advanced Cloud Orchestration', category: 'Technology', type: 'wanted', proficiency: 'Advanced', description: 'Kubernetes multi-cluster management and zero-trust security.' }
+      { id: 202, title: 'Advanced Cloud Orchestration', category: 'Programming', type: 'wanted', proficiency: 'Advanced', description: 'Kubernetes multi-cluster management and zero-trust security.' }
     ],
     ratings: []
   },
@@ -35,12 +35,12 @@ const DEFAULT_USERS = [
     isBanned: false,
     isDemo: true,
     skillsOffered: [
-      { id: 101, title: 'React 18 & Frontend Architecture', category: 'Technology', type: 'offered', proficiency: 'Advanced', description: 'Modern React patterns, custom hooks, and Tailwind CSS component systems.' },
-      { id: 102, title: 'Node.js & Express REST APIs', category: 'Technology', type: 'offered', proficiency: 'Advanced', description: 'Scalable backend design, authentication, and database integration.' }
+      { id: 101, title: 'React 18 & Frontend Architecture', category: 'Programming', type: 'offered', proficiency: 'Advanced', description: 'Modern React patterns, custom hooks, and Tailwind CSS component systems.' },
+      { id: 102, title: 'Node.js & Express REST APIs', category: 'Programming', type: 'offered', proficiency: 'Advanced', description: 'Scalable backend design, authentication, and database integration.' }
     ],
     skillsWanted: [
       { id: 103, title: 'Figma UI/UX & Design Systems', category: 'Design', type: 'wanted', proficiency: 'Beginner', description: 'Want to learn design tokens, auto-layout, and prototyping in Figma.' },
-      { id: 104, title: 'Conversational Spanish', category: 'Language', type: 'wanted', proficiency: 'Beginner', description: 'Looking for native speaker to practice conversational fluency.' }
+      { id: 104, title: 'Conversational Spanish', category: 'Languages', type: 'wanted', proficiency: 'Beginner', description: 'Looking for native speaker to practice conversational fluency.' }
     ],
     ratings: [
       { id: 1, rating: 5, feedback: 'Alex was an incredible mentor. Taught me modern React in just 2 sessions!', rater: { id: 3, name: 'Elena Rostova', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80' }, createdAt: new Date(Date.now() - 86400000 * 5).toISOString() }
@@ -62,7 +62,7 @@ const DEFAULT_USERS = [
       { id: 105, title: 'Figma UI/UX Prototyping', category: 'Design', type: 'offered', proficiency: 'Expert', description: 'Comprehensive design workflows, component libraries, and interactive prototypes.' }
     ],
     skillsWanted: [
-      { id: 106, title: 'React Basics', category: 'Technology', type: 'wanted', proficiency: 'Beginner', description: 'Want to understand how front-end engineers consume Figma designs in React.' }
+      { id: 106, title: 'React Basics', category: 'Programming', type: 'wanted', proficiency: 'Beginner', description: 'Want to understand how front-end engineers consume Figma designs in React.' }
     ],
     ratings: []
   },
@@ -82,7 +82,7 @@ const DEFAULT_USERS = [
       { id: 107, title: 'Advanced Excel & Power BI', category: 'Data & Analytics', type: 'offered', proficiency: 'Expert', description: 'Power Query, DAX formulas, interactive financial dashboards, and spreadsheet automation.' }
     ],
     skillsWanted: [
-      { id: 108, title: 'Python Automation', category: 'Technology', type: 'wanted', proficiency: 'Intermediate', description: 'Looking to automate Excel tasks using pandas and openpyxl.' }
+      { id: 108, title: 'Python Automation', category: 'Programming', type: 'wanted', proficiency: 'Intermediate', description: 'Looking to automate Excel tasks using pandas and openpyxl.' }
     ],
     ratings: []
   },
@@ -99,11 +99,11 @@ const DEFAULT_USERS = [
     isBanned: false,
     isDemo: false,
     skillsOffered: [
-      { id: 109, title: 'Conversational Spanish', category: 'Language', type: 'offered', proficiency: 'Expert', description: 'Practical Spanish conversation for travel, business, or daily life.' },
+      { id: 109, title: 'Conversational Spanish', category: 'Languages', type: 'offered', proficiency: 'Expert', description: 'Practical Spanish conversation for travel, business, or daily life.' },
       { id: 110, title: 'Acoustic Guitar Lessons', category: 'Music & Arts', type: 'offered', proficiency: 'Advanced', description: 'Fingerstyle technique, chord transitions, and musical theory basics.' }
     ],
     skillsWanted: [
-      { id: 111, title: 'Web Development Basics', category: 'Technology', type: 'wanted', proficiency: 'Beginner', description: 'Want to build my own portfolio website.' }
+      { id: 111, title: 'Web Development Basics', category: 'Programming', type: 'wanted', proficiency: 'Beginner', description: 'Want to build my own portfolio website.' }
     ],
     ratings: []
   }
@@ -127,6 +127,22 @@ function setStored(key, val) {
 export function initMockStorage() {
   if (!localStorage.getItem('skillswap_mock_users')) {
     setStored('users', DEFAULT_USERS);
+  } else {
+    try {
+      const existing = getStored('users', DEFAULT_USERS);
+      let changed = false;
+      existing.forEach(u => {
+        ['skillsOffered', 'skillsWanted', 'skills'].forEach(k => {
+          if (Array.isArray(u[k])) {
+            u[k].forEach(s => {
+              if (s && s.category === 'Technology') { s.category = 'Programming'; changed = true; }
+              if (s && s.category === 'Language') { s.category = 'Languages'; changed = true; }
+            });
+          }
+        });
+      });
+      if (changed) setStored('users', existing);
+    } catch (e) {}
   }
   if (!localStorage.getItem('skillswap_mock_swaps')) {
     setStored('swaps', [
@@ -458,6 +474,20 @@ export async function handleMockRequest(config) {
           user: { id: u.id, name: u.name, avatar: u.avatar, location: u.location, rating: 4.9, isPublic: u.isPublic !== false }
         });
       });
+      (u.skills || []).forEach(s => {
+        const sType = s.type === 'wanted' ? 'wanted' : 'offered';
+        const alreadyIn = allSkills.some(existing =>
+          String(existing.id) === String(s.id) ||
+          ((existing.title || '').toLowerCase() === (s.title || '').toLowerCase() && String(existing.user?.id) === String(u.id))
+        );
+        if (!alreadyIn) {
+          allSkills.push({
+            ...s,
+            type: sType,
+            user: { id: u.id, name: u.name, avatar: u.avatar, location: u.location, rating: 4.9, isPublic: u.isPublic !== false }
+          });
+        }
+      });
     });
 
     // Also include any standalone cloud skills for instant cross-device visibility
@@ -467,7 +497,7 @@ export async function handleMockRequest(config) {
         if (!cs || !cs.title) return;
         const alreadyIncluded = allSkills.some(s =>
           String(s.id) === String(cs.id) ||
-          ((s.title || '').toLowerCase() === cs.title.toLowerCase() && String(s.user?.id) === String(cs.userId || cs.user?.id))
+          ((s.title || '').toLowerCase() === (cs.title || '').toLowerCase() && String(s.user?.id) === String(cs.userId || cs.user?.id))
         );
         if (!alreadyIncluded) {
           allSkills.unshift({
@@ -502,7 +532,13 @@ export async function handleMockRequest(config) {
           filtered = filtered.filter(s => (s.title && s.title.toLowerCase().includes(q)) || (s.description && s.description.toLowerCase().includes(q)));
         }
         if (category && category !== 'All') {
-          filtered = filtered.filter(s => s.category && s.category.toLowerCase() === category.toLowerCase());
+          const catNorm = (c) => {
+            const low = (c || '').toLowerCase().trim();
+            if (low === 'technology' || low === 'programming') return 'programming';
+            if (low === 'language' || low === 'languages') return 'languages';
+            return low;
+          };
+          filtered = filtered.filter(s => catNorm(s.category) === catNorm(category));
         }
         if (type && type !== 'all') {
           filtered = filtered.filter(s => s.type === type);
@@ -661,7 +697,8 @@ export async function handleMockRequest(config) {
         sessionStorage.setItem('skillswap_user', JSON.stringify(user));
       } catch (e) {}
 
-      // Sync deletion to Cloud Store
+      // Sync deletion to Cloud Store & Firestore
+      deleteCloudSkill(skillId);
       try {
         pullCloudStore().then(cloudData => {
           const filteredSkills = (cloudData.skills || []).filter(s => s.id !== skillId);

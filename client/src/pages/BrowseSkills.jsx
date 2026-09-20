@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, Filter, RotateCcw, AlertCircle, Sparkles } from 'lucide-react';
+import { Search, Filter, RotateCcw, AlertCircle, Sparkles, RefreshCw, Cloud, ShieldAlert } from 'lucide-react';
 import api from '../api/axiosClient';
 import SkillCard from '../components/SkillCard';
 import RequestSwapModal from '../components/RequestSwapModal';
 import { useAuth } from '../context/AuthContext';
+import { getFirestoreHealth } from '../api/cloudSync';
 
 const BrowseSkills = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -18,11 +19,12 @@ const BrowseSkills = () => {
   // Filters
   const search = searchParams.get('search') || '';
   const category = searchParams.get('category') || 'All';
-  const type = searchParams.get('type') || 'offered';
+  const type = searchParams.get('type') || 'all';
   const proficiency = searchParams.get('proficiency') || 'All';
 
   // Local state for instant input
   const [keywordInput, setKeywordInput] = useState(search);
+  const [firestoreHealth, setFirestoreHealth] = useState(getFirestoreHealth());
 
   // Modal state
   const [selectedSkill, setSelectedSkill] = useState(null);
@@ -49,6 +51,7 @@ const BrowseSkills = () => {
       setError('Failed to load skills list.');
     } finally {
       setLoading(false);
+      setFirestoreHealth(getFirestoreHealth());
     }
   };
 
@@ -114,6 +117,29 @@ const BrowseSkills = () => {
         </p>
       </div>
 
+      {firestoreHealth.permissionDenied && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+          <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+          <div className="space-y-1">
+            <p className="font-bold text-amber-950">
+              Firebase Cloud Firestore Notice for Live Multi-Device Sync:
+            </p>
+            <p className="text-amber-800 leading-relaxed font-normal">
+              Firestore database exists on <code>skill-swap-f29e2</code>. To allow real-time cross-device updates, open{' '}
+              <a
+                href="https://console.firebase.google.com/project/skill-swap-f29e2/firestore/rules"
+                target="_blank"
+                rel="noreferrer"
+                className="underline font-bold text-[#E05504] hover:text-[#FAA121]"
+              >
+                Firebase Console &gt; Firestore Database &gt; Rules
+              </a>{' '}
+              and set <code>allow read, write: if true;</code> then click <strong>Publish</strong>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Neomorphic Search & Filter Controls */}
       <div className="neo-card p-5 space-y-4">
         {/* Search input bar */}
@@ -134,7 +160,16 @@ const BrowseSkills = () => {
           >
             Search
           </button>
-          {(search || category !== 'All' || proficiency !== 'All' || type !== 'offered') && (
+          <button
+            type="button"
+            onClick={() => fetchSkills()}
+            className="px-3.5 py-2.5 neo-btn text-xs font-semibold rounded-xl flex items-center gap-1.5 flex-shrink-0 text-stone-700 hover:text-[#E05504]"
+            title="Refresh skills directory"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#E05504]' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          {(search || category !== 'All' || proficiency !== 'All' || type !== 'all') && (
             <button
               type="button"
               onClick={resetFilters}
@@ -149,8 +184,19 @@ const BrowseSkills = () => {
 
         {/* Filter Rows */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#F0ECC7] text-xs">
-          {/* Type Toggle: Offered vs Wanted */}
+          {/* Type Toggle: All vs Offered vs Wanted */}
           <div className="flex items-center gap-1.5 neo-inset p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => updateFilters({ type: 'all' })}
+              className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all ${
+                type === 'all'
+                  ? 'neo-btn text-stone-900 font-extrabold'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              All Skills
+            </button>
             <button
               type="button"
               onClick={() => updateFilters({ type: 'offered' })}
@@ -172,17 +218,6 @@ const BrowseSkills = () => {
               }`}
             >
               Skills Wanted
-            </button>
-            <button
-              type="button"
-              onClick={() => updateFilters({ type: 'all' })}
-              className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition-all ${
-                type === 'all'
-                  ? 'neo-btn text-stone-900 font-extrabold'
-                  : 'text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              All
             </button>
           </div>
 
