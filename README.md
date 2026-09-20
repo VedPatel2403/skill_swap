@@ -10,18 +10,12 @@ The application runs as a unified full-stack system:
 * **Application URL:** [http://localhost:5000](http://localhost:5000)
 * **REST API URL:** [http://localhost:5000/api](http://localhost:5000/api)
 
-### ⚡ Quick Demo Accounts (1-Click Login available in the UI Navbar & Login page)
+### ⚡ Quick Demo & Admin Accounts
 
-| Role | Account Name | Email | Password | Primary Skills |
+| Role | Account Name | Email | Password / Auth | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Admin** | Platform Administrator | `admin@skillswap.com` | `adminpassword123` | Governance, Content Moderation, Reporting |
-| **User** | Alex Rivera | `alex@example.com` | `password123` | React, Node.js, Python Automation |
-| **User** | Elena Rostova | `elena@example.com` | `password123` | Figma UI/UX, Adobe Photoshop, Retouching |
-| **User** | David Chen | `david@example.com` | `password123` | Advanced Excel, Power BI, SQL Dashboards |
-| **User** | Maria Santos | `maria@example.com` | `password123` | Conversational Spanish, Acoustic Guitar |
-| **User** | Liam Johnson | `liam@example.com` | `password123` | SEO Strategy, Organic Growth Marketing |
-| **User** | Sophia Lee *(Private)* | `sophia@example.com` | `password123` | Photography, Color Grading *(Private Profile)* |
-| **User** | Spammer *(Banned)* | `spammer@fakebot.io` | `password123` | *(Suspended account demonstrating ban moderation)* |
+| **Super Admin** | Platform Administrator | `patelvedb2403@gmail.com` | Google Login or Email | Primary Administrator account with full platform moderation |
+| **Demo User** | Alex Rivera | `alex@example.com` | `password123` | Quick 1-click login available in the UI |
 
 ---
 
@@ -58,10 +52,12 @@ The application runs as a unified full-stack system:
 
 ## 🛠️ Architecture & Tech Stack
 
-* **Frontend:** React 18, Vite, Tailwind CSS, Lucide React, Axios, React Router v6.
-* **Backend:** Node.js, Express.js RESTful API, JSON Web Tokens (JWT), Bcrypt password hashing.
-* **Database & ORM:** Sequelize ORM with SQLite (zero-dependency, instant execution, auto-seeded). Dual-mode architecture enables switching to PostgreSQL with a single `DATABASE_URL` or `DB_DIALECT=postgres` variable.
-* **Design System:** "Classic & Clean" aesthetic adhering strictly to the visual reference with high negative space, subtle borders, slate/neutral monochrome palette, and clear visual hierarchy for primary actions.
+* **Frontend:** React 18 (SPA), Vite, Tailwind CSS, Lucide React, Axios, React Router v6.
+* **Neomorphic Soft-UI & Color Palette:** Custom tactile 3D soft-UI design tokens featuring an organic 5-color palette (`#FEF8E0` Alabaster Cream, `#F0ECC7` Warm Sand Linen, `#E05504` Flame Terracotta, `#FAA121` Sunburst Amber, `#AFDFB5` Celadon Mint Sage) with ambient velocity-reactive cursor lighting and custom OS cursor.
+* **Authentication:** Dual-Tier Auth — Firebase Google OAuth 2.0 and JWT authentication with local multi-account switcher drawer.
+* **Backend:** Node.js, Express.js RESTful API, Helmet security, rate limiting, and CORS protection.
+* **Database & ORM:** Sequelize ORM with SQLite (zero-dependency, instant execution, auto-seeded). Dual-mode architecture enables switching to PostgreSQL with a single `DATABASE_URL`.
+* **Presentation Deck:** Included 16:9 widescreen PowerPoint deck (`Skill_Swap_Presentation.pptx`) covering Problem Statement, Solution, Target Users, Technical Approach, Market Potential, Scalability, and Future Roadmap.
 
 ---
 
