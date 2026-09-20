@@ -54,6 +54,12 @@ const BrowseSkills = () => {
 
   useEffect(() => {
     fetchSkills();
+
+    const handleUpdate = () => {
+      fetchSkills();
+    };
+    window.addEventListener('skillswap:profile-updated', handleUpdate);
+    return () => window.removeEventListener('skillswap:profile-updated', handleUpdate);
   }, [searchParams]);
 
   const updateFilters = (newParams) => {

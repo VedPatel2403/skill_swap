@@ -53,7 +53,17 @@ const SwapsDashboard = () => {
 
   useEffect(() => {
     fetchSwaps();
-  }, []);
+
+    const handleUpdate = () => {
+      fetchSwaps();
+    };
+    window.addEventListener('skillswap:activity-updated', handleUpdate);
+    window.addEventListener('skillswap:profile-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('skillswap:activity-updated', handleUpdate);
+      window.removeEventListener('skillswap:profile-updated', handleUpdate);
+    };
+  }, [user?.id]);
 
   const handleAccept = async (swapId) => {
     setActionLoadingId(swapId);

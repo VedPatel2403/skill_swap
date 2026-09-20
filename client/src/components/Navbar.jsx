@@ -142,6 +142,8 @@ const Navbar = () => {
 
   // Combine active user, saved accounts on this device, and demo accounts
   const allSwitchAccounts = (() => {
+    if (!isAuthenticated) return [];
+
     const list = [];
     const seenEmails = new Set();
 
@@ -179,18 +181,12 @@ const Navbar = () => {
         return;
       }
 
-      if (account.isDemo || account.email === 'alex@example.com') {
-        await demoLogin(account.email);
-        setDemoDropdownOpen(false);
-        setMobileMenuOpen(false);
-        navigate('/swaps');
-        return;
-      }
-
       await switchAccount(account);
       setDemoDropdownOpen(false);
       setMobileMenuOpen(false);
-      navigate('/swaps');
+      if (location.pathname === '/login' || location.pathname === '/register') {
+        navigate('/swaps');
+      }
     } catch (err) {
       console.error('Account switch failed:', err);
     }
@@ -329,8 +325,9 @@ const Navbar = () => {
             {/* Proper Notification Icon Dropdown */}
             <NotificationMenu />
 
-            {/* Switch Account Dropdown */}
-            <div className="relative" ref={demoDropdownRef}>
+            {/* Switch Account Dropdown (Authenticated Only) */}
+            {isAuthenticated && (
+              <div className="relative" ref={demoDropdownRef}>
               <button
                 type="button"
                 onClick={() => setDemoDropdownOpen(!demoDropdownOpen)}
@@ -467,6 +464,7 @@ const Navbar = () => {
                 </div>
               )}
             </div>
+          )}
 
             {/* Auth Buttons or User Pill */}
             {isAuthenticated ? (
@@ -571,97 +569,99 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* Mobile Switch Account Drawer */}
-          <div className="pt-2 border-t border-[#F0ECC7]">
-            <div className="flex items-center justify-between px-1 mb-2">
-              <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">
-                Switch Account
-              </span>
+          {/* Mobile Switch Account Drawer (Authenticated Only) */}
+          {isAuthenticated && (
+            <div className="pt-2 border-t border-[#F0ECC7]">
+              <div className="flex items-center justify-between px-1 mb-2">
+                <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                  Switch Account
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddNewAccount}
+                  className="text-xs font-bold text-[#E05504] flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Add Account</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+                {allSwitchAccounts.map((rawAccount) => {
+                  const account = getAccountToDisplay(rawAccount);
+                  const isCurrent = user?.email?.toLowerCase() === account.email?.toLowerCase();
+                  const isAdminAccount = account.role === 'admin' || account.email === 'patelvedb2403@gmail.com' || account.email === 'admin@skillswap.com';
+                  return (
+                    <div
+                      key={account.id || account.email}
+                      className={`p-1.5 text-xs text-left rounded-xl flex items-center justify-between gap-2 transition-all ${
+                        isCurrent ? 'neo-inset text-stone-900 font-bold bg-[#AFDFB5]/25 border border-[#AFDFB5]/50' : 'neo-btn text-stone-700'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleAccountSwitch(account)}
+                        className="flex items-center gap-2.5 min-w-0 flex-1 text-left p-1 cursor-pointer"
+                      >
+                        <div className="relative flex-shrink-0">
+                          <img
+                            src={
+                              account.avatar ||
+                              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+                                account.name || 'user'
+                              )}`
+                            }
+                            alt={account.name}
+                            className="w-7 h-7 rounded-full object-cover border border-white shadow-xs"
+                          />
+                          {isCurrent && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#AFDFB5] border border-stone-800 rounded-full" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold truncate flex items-center gap-1">
+                            <span className="truncate">{account.name}</span>
+                            {isCurrent && <span className="text-[9px] text-[#166534] font-bold">(Active)</span>}
+                          </div>
+                          <span className="text-[10px] text-stone-500 block capitalize">{account.role}</span>
+                        </div>
+                      </button>
+
+                      {!isAdminAccount ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteError(null);
+                            setAccountToDelete(account);
+                            setMobileMenuOpen(false);
+                          }}
+                          className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-100/70 transition-colors flex-shrink-0 cursor-pointer"
+                          title={`Delete or remove ${account.name}'s account`}
+                          aria-label={`Delete ${account.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="p-1.5 text-stone-300 flex-shrink-0" title="Protected">
+                          <ShieldCheck className="w-3.5 h-3.5 text-stone-400" />
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add New Account Button on Mobile */}
               <button
                 type="button"
                 onClick={handleAddNewAccount}
-                className="text-xs font-bold text-[#E05504] flex items-center gap-1 hover:underline cursor-pointer"
+                className="w-full mt-2.5 flex items-center justify-center gap-2 py-2 px-3 rounded-xl neo-btn text-xs font-bold text-[#E05504] hover:text-[#c2410c] transition-all cursor-pointer"
               >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Add Account</span>
+                <UserPlus className="w-4 h-4 text-[#E05504]" />
+                <span>Add New Account</span>
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
-              {allSwitchAccounts.map((rawAccount) => {
-                const account = getAccountToDisplay(rawAccount);
-                const isCurrent = user?.email?.toLowerCase() === account.email?.toLowerCase();
-                const isAdminAccount = account.role === 'admin' || account.email === 'patelvedb2403@gmail.com' || account.email === 'admin@skillswap.com';
-                return (
-                  <div
-                    key={account.id || account.email}
-                    className={`p-1.5 text-xs text-left rounded-xl flex items-center justify-between gap-2 transition-all ${
-                      isCurrent ? 'neo-inset text-stone-900 font-bold bg-[#AFDFB5]/25 border border-[#AFDFB5]/50' : 'neo-btn text-stone-700'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleAccountSwitch(account)}
-                      className="flex items-center gap-2.5 min-w-0 flex-1 text-left p-1 cursor-pointer"
-                    >
-                      <div className="relative flex-shrink-0">
-                        <img
-                          src={
-                            account.avatar ||
-                            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                              account.name || 'user'
-                            )}`
-                          }
-                          alt={account.name}
-                          className="w-7 h-7 rounded-full object-cover border border-white shadow-xs"
-                        />
-                        {isCurrent && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#AFDFB5] border border-stone-800 rounded-full" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold truncate flex items-center gap-1">
-                          <span className="truncate">{account.name}</span>
-                          {isCurrent && <span className="text-[9px] text-[#166534] font-bold">(Active)</span>}
-                        </div>
-                        <span className="text-[10px] text-stone-500 block capitalize">{account.role}</span>
-                      </div>
-                    </button>
-
-                    {!isAdminAccount ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteError(null);
-                          setAccountToDelete(account);
-                          setMobileMenuOpen(false);
-                        }}
-                        className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-100/70 transition-colors flex-shrink-0 cursor-pointer"
-                        title={`Delete or remove ${account.name}'s account`}
-                        aria-label={`Delete ${account.name}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    ) : (
-                      <span className="p-1.5 text-stone-300 flex-shrink-0" title="Protected">
-                        <ShieldCheck className="w-3.5 h-3.5 text-stone-400" />
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Add New Account Button on Mobile */}
-            <button
-              type="button"
-              onClick={handleAddNewAccount}
-              className="w-full mt-2.5 flex items-center justify-center gap-2 py-2 px-3 rounded-xl neo-btn text-xs font-bold text-[#E05504] hover:text-[#c2410c] transition-all cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4 text-[#E05504]" />
-              <span>Add New Account</span>
-            </button>
-          </div>
+          )}
 
           {/* Mobile Auth */}
           <div className="pt-2 border-t border-slate-300/40">

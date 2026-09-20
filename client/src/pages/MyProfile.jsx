@@ -76,8 +76,18 @@ const MyProfile = () => {
 
   const fetchMySkills = async () => {
     try {
+      setLoadingSkills(true);
       const res = await api.get('/auth/me');
-      setMySkills(res.data.skills || []);
+      const u = res.data?.user || user;
+      const skillsFromRes = res.data?.skills;
+      const combined = (Array.isArray(skillsFromRes) && skillsFromRes.length > 0)
+        ? skillsFromRes
+        : [
+            ...(u?.skillsOffered || []),
+            ...(u?.skillsWanted || []),
+            ...(Array.isArray(u?.skills) ? u.skills : [])
+          ];
+      setMySkills(combined || []);
     } catch (err) {
       console.error('Failed to load my skills', err);
     } finally {
@@ -93,7 +103,10 @@ const MyProfile = () => {
     try {
       setLoadingActivities(true);
       const res = await api.get('/notifications');
-      setAccountActivities(res.data?.notifications || []);
+      const items = Array.isArray(res.data)
+        ? res.data
+        : (res.data?.notifications || []);
+      setAccountActivities(items);
     } catch (err) {
       console.error('Failed to load account activities', err);
     } finally {
@@ -106,10 +119,15 @@ const MyProfile = () => {
     fetchAccountActivities();
 
     const handleActivityEvent = () => {
+      fetchMySkills();
       fetchAccountActivities();
     };
     window.addEventListener('skillswap:activity-updated', handleActivityEvent);
-    return () => window.removeEventListener('skillswap:activity-updated', handleActivityEvent);
+    window.addEventListener('skillswap:profile-updated', handleActivityEvent);
+    return () => {
+      window.removeEventListener('skillswap:activity-updated', handleActivityEvent);
+      window.removeEventListener('skillswap:profile-updated', handleActivityEvent);
+    };
   }, [user?.id]);
 
   const renderActivityIcon = (type) => {
@@ -359,16 +377,16 @@ const MyProfile = () => {
     try {
       if (editingSkillId) {
         await api.put(`/skills/${editingSkillId}`, {
-          title: skillTitle,
-          description: skillDesc,
+          title: skillTitle.trim(),
+          description: skillDesc.trim(),
           category: skillCategory,
           type: skillType,
           proficiency: skillProficiency
         });
       } else {
         await api.post('/skills', {
-          title: skillTitle,
-          description: skillDesc,
+          title: skillTitle.trim(),
+          description: skillDesc.trim(),
           category: skillCategory,
           type: skillType,
           proficiency: skillProficiency
@@ -377,6 +395,8 @@ const MyProfile = () => {
       setIsSkillModalOpen(false);
       await fetchMySkills();
       await refreshUser();
+      window.dispatchEvent(new CustomEvent('skillswap:profile-updated'));
+      window.dispatchEvent(new CustomEvent('skillswap:activity-updated'));
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to save skill.');
     }
@@ -388,6 +408,8 @@ const MyProfile = () => {
       await api.delete(`/skills/${id}`);
       await fetchMySkills();
       await refreshUser();
+      window.dispatchEvent(new CustomEvent('skillswap:profile-updated'));
+      window.dispatchEvent(new CustomEvent('skillswap:activity-updated'));
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to delete skill.');
     }

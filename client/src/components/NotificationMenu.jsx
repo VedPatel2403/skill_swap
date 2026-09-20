@@ -41,9 +41,15 @@ const NotificationMenu = () => {
     try {
       setLoading(true);
       const res = await api.get('/notifications');
-      const items = res.data?.notifications || [];
+      const items = Array.isArray(res.data)
+        ? res.data
+        : (res.data?.notifications || []);
       setNotifications(items);
-      setUnreadCount(res.data?.unreadCount !== undefined ? res.data.unreadCount : items.filter(n => !n.isRead).length);
+      setUnreadCount(
+        res.data?.unreadCount !== undefined
+          ? res.data.unreadCount
+          : items.filter((n) => !n.isRead).length
+      );
     } catch (err) {
       // Silently catch network glitches
       console.warn('Could not fetch notifications:', err.message);
@@ -60,7 +66,11 @@ const NotificationMenu = () => {
       fetchNotifications();
     };
     window.addEventListener('skillswap:activity-updated', handleActivityUpdated);
-    return () => window.removeEventListener('skillswap:activity-updated', handleActivityUpdated);
+    window.addEventListener('skillswap:profile-updated', handleActivityUpdated);
+    return () => {
+      window.removeEventListener('skillswap:activity-updated', handleActivityUpdated);
+      window.removeEventListener('skillswap:profile-updated', handleActivityUpdated);
+    };
   }, [user?.id, isAuthenticated]);
 
   // Periodic polling every 30 seconds

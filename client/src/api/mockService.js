@@ -184,6 +184,26 @@ export function initMockStorage() {
         link: '/swaps',
         isRead: false,
         createdAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        id: 2,
+        userId: 1,
+        title: 'Platform System Alert 🛡️',
+        message: 'Welcome Ved Patel! Platform systems and audit monitors are active.',
+        type: 'welcome',
+        link: '/admin',
+        isRead: false,
+        createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
+      },
+      {
+        id: 3,
+        userId: 3,
+        title: 'Swap Request Accepted 🎉',
+        message: 'Alex Rivera accepted your design system mentoring session!',
+        type: 'swap_accepted',
+        link: '/swaps',
+        isRead: false,
+        createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
       }
     ]);
   }
@@ -204,13 +224,24 @@ export async function handleMockRequest(config) {
   const broadcasts = getStored('broadcasts', []);
   const notifications = getStored('notifications', []);
 
-  // Resolve current user from stored session
-  const storedUserRaw = localStorage.getItem('skillswap_user') || sessionStorage.getItem('skillswap_user');
+  // Resolve current user from Authorization header or stored session
   let currentUser = null;
-  if (storedUserRaw) {
-    try {
-      currentUser = JSON.parse(storedUserRaw);
-    } catch (e) {}
+  const authHeader = config.headers?.Authorization || config.headers?.authorization;
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const tokenStr = authHeader.replace('Bearer ', '').trim();
+    const match = tokenStr.match(/^(?:demo_|fb_)?token_([^_]+)_/);
+    if (match) {
+      const tokenUid = match[1];
+      currentUser = users.find(u => String(u.id) === String(tokenUid));
+    }
+  }
+  if (!currentUser) {
+    const storedUserRaw = localStorage.getItem('skillswap_user') || sessionStorage.getItem('skillswap_user');
+    if (storedUserRaw) {
+      try {
+        currentUser = JSON.parse(storedUserRaw);
+      } catch (e) {}
+    }
   }
   if (!currentUser) {
     currentUser = users[1]; // fallback to Alex Rivera
@@ -221,16 +252,20 @@ export async function handleMockRequest(config) {
 
   // 1. GET /auth/demo-accounts
   if (url.includes('/auth/demo-accounts')) {
-    const demo = users.find(u => u.isDemo || u.email === 'alex@example.com') || users[1];
-    return ok([demo]);
+    return ok(users);
   }
 
   // 2. POST /auth/demo-login
   if (url.includes('/auth/demo-login')) {
     const targetEmail = (body.email || 'alex@example.com').toLowerCase();
     const demo = users.find(u => u.email.toLowerCase() === targetEmail) || users[1];
+    const token = 'demo_token_' + demo.id + '_' + Date.now();
+    localStorage.setItem('skillswap_user', JSON.stringify(demo));
+    sessionStorage.setItem('skillswap_user', JSON.stringify(demo));
+    localStorage.setItem('skillswap_token', token);
+    sessionStorage.setItem('skillswap_token', token);
     return ok({
-      token: 'demo_token_' + demo.id + '_' + Date.now(),
+      token,
       user: demo
     });
   }
@@ -327,16 +362,39 @@ export async function handleMockRequest(config) {
 
   // 6. GET /auth/me
   if (url.includes('/auth/me')) {
-    const target = users.find(u => u.id === currentUser.id) || currentUser;
-    const pendingCount = swaps.filter(s => s.recipientId === target.id && s.status === 'pending').length;
+    const target = users.find(u => String(u.id) === String(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser;
+    const allUserSkills = [
+      ...(target.skillsOffered || []),
+      ...(target.skillsWanted || [])
+    ];
+    const pendingCount = swaps.filter(s => String(s.recipientId) === String(target.id) && s.status === 'pending').length;
     return ok({
       user: target,
+      skills: allUserSkills,
       pendingIncomingCount: pendingCount
     });
   }
 
   // 7. POST /auth/record-switch, /auth/logout
-  if (url.includes('/auth/record-switch') || url.includes('/auth/logout')) {
+  if (url.includes('/auth/record-switch')) {
+    const targetUid = body.accountId || (currentUser ? currentUser.id : null);
+    const targetUser = users.find(u => String(u.id) === String(targetUid) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser;
+    if (targetUser) {
+      notifications.unshift({
+        id: Date.now(),
+        userId: targetUser.id,
+        title: 'Switched into Account (Active Session) 🔄',
+        message: `Active session switched into ${targetUser.name}'s account.`,
+        type: 'account_switch',
+        link: '/profile',
+        isRead: false,
+        createdAt: new Date().toISOString()
+      });
+      setStored('notifications', notifications);
+    }
+    return ok({ success: true });
+  }
+  if (url.includes('/auth/logout')) {
     return ok({ success: true });
   }
 
@@ -392,52 +450,82 @@ export async function handleMockRequest(config) {
 
   // 9. POST /skills
   if (url === '/skills' && method === 'post') {
-    const user = users.find(u => u.id === currentUser.id);
+    const user = users.find(u => String(u.id) === String(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser;
     const newSkill = {
       id: Date.now(),
-      title: body.title || 'New Skill',
-      category: body.category || 'General',
+      userId: user.id,
+      title: (body.title || 'New Skill').trim(),
+      category: body.category || 'Programming',
       type: body.type || 'offered',
       proficiency: body.proficiency || 'Intermediate',
-      description: body.description || ''
+      description: (body.description || '').trim(),
+      createdAt: new Date().toISOString()
     };
-    if (user) {
-      if (newSkill.type === 'offered') {
-        user.skillsOffered = user.skillsOffered || [];
-        user.skillsOffered.push(newSkill);
-      } else {
-        user.skillsWanted = user.skillsWanted || [];
-        user.skillsWanted.push(newSkill);
-      }
-      setStored('users', users);
+    if (newSkill.type === 'offered') {
+      user.skillsOffered = user.skillsOffered || [];
+      const filtered = user.skillsOffered.filter(s => s.title.toLowerCase() !== newSkill.title.toLowerCase());
+      user.skillsOffered = [newSkill, ...filtered];
+    } else {
+      user.skillsWanted = user.skillsWanted || [];
+      const filtered = user.skillsWanted.filter(s => s.title.toLowerCase() !== newSkill.title.toLowerCase());
+      user.skillsWanted = [newSkill, ...filtered];
     }
-    return ok(newSkill, 201);
+    setStored('users', users);
+    try {
+      localStorage.setItem('skillswap_user', JSON.stringify(user));
+      sessionStorage.setItem('skillswap_user', JSON.stringify(user));
+    } catch (e) {}
+
+    // Add activity notification for adding this skill
+    notifications.unshift({
+      id: Date.now(),
+      userId: user.id,
+      title: `Skill Added: ${newSkill.title}`,
+      message: `You added "${newSkill.title}" (${newSkill.category} • ${newSkill.proficiency}) to your ${newSkill.type === 'offered' ? 'Skills Offered' : 'Skills Wanted'}.`,
+      type: 'skill_created',
+      link: '/profile',
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+    setStored('notifications', notifications);
+
+    return ok({ message: 'Skill added successfully!', skill: newSkill, ...newSkill }, 201);
   }
 
   // 10. PUT /skills/:id
   if (url.startsWith('/skills/') && method === 'put') {
     const skillId = parseInt(url.split('/')[2]);
-    const user = users.find(u => u.id === currentUser.id);
+    const user = users.find(u => String(u.id) === String(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser;
+    let updatedItem = null;
     if (user) {
       ['skillsOffered', 'skillsWanted'].forEach(listKey => {
         const item = (user[listKey] || []).find(s => s.id === skillId);
         if (item) {
           Object.assign(item, body);
+          updatedItem = item;
         }
       });
       setStored('users', users);
+      try {
+        localStorage.setItem('skillswap_user', JSON.stringify(user));
+        sessionStorage.setItem('skillswap_user', JSON.stringify(user));
+      } catch (e) {}
     }
-    return ok({ success: true, id: skillId });
+    return ok({ success: true, id: skillId, skill: updatedItem });
   }
 
   // 11. DELETE /skills/:id
   if (url.startsWith('/skills/') && method === 'delete') {
     const skillId = parseInt(url.split('/')[2]);
-    const user = users.find(u => u.id === currentUser.id);
+    const user = users.find(u => String(u.id) === String(currentUser.id) || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser;
     if (user) {
       user.skillsOffered = (user.skillsOffered || []).filter(s => s.id !== skillId);
       user.skillsWanted = (user.skillsWanted || []).filter(s => s.id !== skillId);
       setStored('users', users);
+      try {
+        localStorage.setItem('skillswap_user', JSON.stringify(user));
+        sessionStorage.setItem('skillswap_user', JSON.stringify(user));
+      } catch (e) {}
     }
     return ok({ success: true });
   }
@@ -655,17 +743,63 @@ export async function handleMockRequest(config) {
   }
 
   // 22. Notifications
-  if (url.includes('/notifications') && method === 'get') {
-    return ok(notifications);
+  if (url.startsWith('/notifications') && method === 'get') {
+    const uid = currentUser ? currentUser.id : null;
+    let userNotifs = notifications.filter(n => !n.userId || String(n.userId) === String(uid));
+
+    // If no notifications yet for this user, provide a welcome notification
+    if (userNotifs.length === 0 && currentUser) {
+      const welcome = {
+        id: Date.now(),
+        userId: currentUser.id,
+        title: `Welcome, ${currentUser.name}! 🎉`,
+        message: 'Your Skill Swap account is active! Propose swaps, share skills, and connect with peers.',
+        type: 'welcome',
+        link: '/browse',
+        isRead: false,
+        createdAt: new Date().toISOString()
+      };
+      notifications.unshift(welcome);
+      setStored('notifications', notifications);
+      userNotifs = [welcome];
+    }
+    const unread = userNotifs.filter(n => !n.isRead).length;
+    return ok({ notifications: userNotifs, unreadCount: unread });
   }
-  if (url.includes('/notifications/read-all')) {
-    notifications.forEach(n => n.isRead = true);
+
+  if (url.includes('/notifications/read-all') && (method === 'put' || method === 'post')) {
+    const uid = currentUser ? currentUser.id : null;
+    notifications.forEach(n => {
+      if (!n.userId || String(n.userId) === String(uid)) {
+        n.isRead = true;
+      }
+    });
     setStored('notifications', notifications);
-    return ok({ success: true });
+    return ok({ success: true, message: 'All notifications marked as read.' });
   }
-  if (url.includes('/notifications') && method === 'delete') {
-    setStored('notifications', []);
-    return ok({ success: true });
+
+  if (url.match(/\/notifications\/[^/]+\/read/) && (method === 'put' || method === 'post')) {
+    const notifId = parseInt(url.split('/')[2]);
+    const target = notifications.find(n => n.id === notifId);
+    if (target) {
+      target.isRead = true;
+      setStored('notifications', notifications);
+    }
+    return ok({ success: true, notification: target });
+  }
+
+  if (url.startsWith('/notifications/') && method === 'delete') {
+    const notifId = parseInt(url.split('/')[2]);
+    const updated = notifications.filter(n => n.id !== notifId);
+    setStored('notifications', updated);
+    return ok({ success: true, message: 'Notification dismissed.' });
+  }
+
+  if (url === '/notifications' && method === 'delete') {
+    const uid = currentUser ? currentUser.id : null;
+    const remaining = notifications.filter(n => n.userId && String(n.userId) !== String(uid));
+    setStored('notifications', remaining);
+    return ok({ success: true, message: 'Notifications cleared.' });
   }
 
   // Default fallback
