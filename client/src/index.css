@@ -1,0 +1,230 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neo-bg: #FEF8E0;
+  --neo-shadow-dark: rgba(195, 175, 140, 0.38);
+  --neo-shadow-light: rgba(255, 255, 255, 0.95);
+
+  /* Project Themed Normal Cursors */
+  --cursor-default: url('/cursor-default.svg') 2 2, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28' fill='none'%3E%3Cdefs%3E%3Cfilter id='s' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeDropShadow dx='1' dy='1.5' stdDeviation='1.2' flood-color='%237c2d12' flood-opacity='0.45'/%3E%3C/filter%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23e05504'/%3E%3Cstop offset='100%25' stop-color='%23faa121'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M2.5 2 L2.5 21 L7.5 16 L12 24.5 L15 23 L10.5 14.5 L17.5 14.5 Z' fill='url(%23g)' stroke='%23ffffff' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' filter='url(%23s)'/%3E%3C/svg%3E") 2 2, default;
+
+  --cursor-pointer: url('/cursor-pointer.svg') 7 1, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28' fill='none'%3E%3Cdefs%3E%3Cfilter id='s' x='-25%25' y='-25%25' width='150%25' height='150%25'%3E%3CfeDropShadow dx='1' dy='1.5' stdDeviation='1.2' flood-color='%237c2d12' flood-opacity='0.45'/%3E%3C/filter%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23e05504'/%3E%3Cstop offset='100%25' stop-color='%23faa121'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M7 1 C6.2 1 5.5 1.7 5.5 2.5 L5.5 11.2 L4.2 10.1 C3.6 9.5 2.6 9.5 2 10.1 C1.4 10.7 1.4 11.7 2 12.3 L6.5 16.8 C7.6 17.9 9.1 18.5 10.7 18.5 L14.5 18.5 C17 18.5 19 16.5 19 14 L19 10.5 C19 9.67 18.33 9 17.5 9 C17.3 9 17.1 9.05 16.9 9.15 C16.6 8.47 15.9 8 15.1 8 C14.9 8 14.7 8.05 14.5 8.15 C14.2 7.47 13.5 7 12.7 7 C12.5 7 12.3 7.05 12.1 7.15 C11.8 6.47 11.1 6 10.3 6 C10.1 6 9.9 6.05 9.7 6.15 L9.7 2.5 C9.7 1.67 9.03 1 8.2 1 Z' fill='url(%23g)' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' filter='url(%23s)'/%3E%3C/svg%3E") 7 1, pointer;
+}
+
+@layer base {
+  html, body {
+    background-color: var(--neo-bg);
+    color: #292524;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    cursor: var(--cursor-default);
+  }
+
+  /* Interactive Clickable Elements: Pointer Hand in Project Colors */
+  a, button, [role="button"], input[type="submit"], input[type="button"], select, .cursor-pointer, .neo-btn, .neo-btn-primary, .neo-btn-secondary {
+    cursor: var(--cursor-pointer) !important;
+  }
+
+  /* Text Inputs: Classic Text I-Beam Cursor */
+  input[type="text"], input[type="email"], input[type="password"], textarea {
+    cursor: text !important;
+  }
+}
+
+/* ========================================================
+   MODERN NEOMORPHISM DESIGN UTILITIES (WARM PALETTE)
+======================================================== */
+
+/* Raised Surface / Card with Interactive Cursor Spotlight */
+.neo-card {
+  background: #FEF8E0;
+  box-shadow: 8px 8px 18px rgba(195, 175, 140, 0.35), -8px -8px 18px rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(240, 236, 199, 0.9);
+  border-radius: 1.25rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.neo-card:not(.absolute):not(.fixed):not(.neo-dropdown) {
+  position: relative;
+  overflow: hidden;
+}
+
+.neo-card::before {
+  content: '';
+  position: absolute;
+  top: var(--mouse-y, -300px);
+  left: var(--mouse-x, -300px);
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(250, 161, 33, 0.14) 0%, rgba(224, 85, 4, 0.05) 45%, transparent 70%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.neo-card:hover::before {
+  opacity: 1;
+}
+
+.neo-card:hover {
+  box-shadow: 10px 10px 22px rgba(195, 175, 140, 0.45), -10px -10px 22px rgba(255, 255, 255, 1);
+}
+
+.neo-card-sm {
+  position: relative;
+  overflow: hidden;
+  background: #FEF8E0;
+  box-shadow: 4px 4px 10px rgba(195, 175, 140, 0.32), -4px -4px 10px rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(240, 236, 199, 0.85);
+  border-radius: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.neo-card-sm::before {
+  content: '';
+  position: absolute;
+  top: var(--mouse-y, -200px);
+  left: var(--mouse-x, -200px);
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(250, 161, 33, 0.12) 0%, transparent 70%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.neo-card-sm:hover::before {
+  opacity: 1;
+}
+
+/* Inset Surface for inputs, search fields, active tabs */
+.neo-inset {
+  background: #F2EED3;
+  box-shadow: inset 3px 3px 6px rgba(195, 175, 140, 0.35), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(215, 204, 178, 0.5);
+  transition: all 0.2s ease;
+}
+
+.neo-inset:focus-within {
+  box-shadow: inset 3px 3px 7px rgba(224, 85, 4, 0.2), inset -3px -3px 7px rgba(255, 255, 255, 0.95);
+  border-color: rgba(224, 85, 4, 0.6);
+}
+
+/* Neomorphic Buttons */
+.neo-btn {
+  background: #FEF8E0;
+  box-shadow: 5px 5px 12px rgba(195, 175, 140, 0.35), -5px -5px 12px rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(240, 236, 199, 0.9);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #44403c;
+}
+
+.neo-btn:hover {
+  box-shadow: 7px 7px 15px rgba(195, 175, 140, 0.45), -7px -7px 15px rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+  color: #1c1917;
+}
+
+.neo-btn:active {
+  box-shadow: inset 3px 3px 6px rgba(195, 175, 140, 0.4), inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+  transform: translateY(0px);
+}
+
+/* Primary Neomorphic Button (Flame Terracotta to Sunburst Amber) */
+.neo-btn-primary {
+  background: linear-gradient(135deg, #e05504 0%, #faa121 100%);
+  box-shadow: 5px 5px 14px rgba(224, 85, 4, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.neo-btn-primary:hover {
+  box-shadow: 6px 6px 18px rgba(224, 85, 4, 0.48), -4px -4px 12px rgba(255, 255, 255, 0.95);
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.neo-btn-primary:active {
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.3);
+  transform: translateY(0px);
+}
+
+/* Success Neomorphic Button (Forest with Celadon Sage glow) */
+.neo-btn-success {
+  background: linear-gradient(135deg, #2e7d32 0%, #afdfb5 100%);
+  box-shadow: 5px 5px 14px rgba(46, 125, 50, 0.3), -4px -4px 10px rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.neo-btn-success:hover {
+  box-shadow: 6px 6px 18px rgba(46, 125, 50, 0.42), -4px -4px 12px rgba(255, 255, 255, 0.95);
+  transform: translateY(-1px);
+}
+
+.neo-btn-success:active {
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.3);
+  transform: translateY(0px);
+}
+
+/* Danger Neomorphic Button */
+.neo-btn-danger {
+  background: linear-gradient(135deg, #dc2626 0%, #f87171 100%);
+  box-shadow: 5px 5px 14px rgba(220, 38, 38, 0.3), -4px -4px 10px rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.neo-btn-danger:hover {
+  box-shadow: 6px 6px 18px rgba(220, 38, 38, 0.42), -4px -4px 12px rgba(255, 255, 255, 0.95);
+  transform: translateY(-1px);
+}
+
+.neo-btn-danger:active {
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.3);
+  transform: translateY(0px);
+}
+
+/* Neomorphic Soft Nav */
+.neo-nav {
+  background: rgba(254, 248, 224, 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(195, 175, 140, 0.25);
+  border-bottom: 1px solid rgba(240, 236, 199, 0.8);
+}
+
+/* Neomorphic Dropdown Menu (Floating over content) */
+.neo-dropdown {
+  background: #FEF8E0 !important;
+  box-shadow: 0 20px 45px rgba(195, 175, 140, 0.5), -6px -6px 20px rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(240, 236, 199, 0.9) !important;
+  border-radius: 1rem;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FEF8E0;
+}
+::-webkit-scrollbar-thumb {
+  background: #d8d1a8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b8b085;
+}

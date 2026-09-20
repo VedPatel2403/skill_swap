@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" fill="none">
+  <defs>
+    <filter id="cursorShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="1" dy="1.5" stdDeviation="1.2" flood-color="#7c2d12" flood-opacity="0.45"/>
+    </filter>
+    <linearGradient id="cursorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e05504"/>
+      <stop offset="100%" stop-color="#faa121"/>
+    </linearGradient>
+  </defs>
+  <path d="M2.5 2 L2.5 21 L7.5 16 L12 24.5 L15 23 L10.5 14.5 L17.5 14.5 Z" 
+        fill="url(#cursorGrad)" 
+        stroke="#ffffff" 
+        stroke-width="1.75" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" 
+        filter="url(#cursorShadow)"/>
+</svg>

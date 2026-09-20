@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skillswap-platform
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - JWT_SECRET=production-skillswap-jwt-secret-key-2026
+      - CORS_ORIGIN=*
+      - RATE_LIMIT_MAX=1000
+      - AUTH_RATE_LIMIT_MAX=150
+    volumes:
+      - skillswap-data:/app/server/data
+
+volumes:
+  skillswap-data:
+    driver: local

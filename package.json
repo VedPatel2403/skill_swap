@@ -1,0 +1,18 @@
+{
+  "name": "skill-swap-platform",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server/src/server.js",
+    "server": "node server/src/server.js",
+    "server:dev": "node --watch server/src/server.js",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "test": "node server/test-e2e.js",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "seed": "node server/src/utils/seedData.js"
+  },
+  "keywords": ["skill-swap", "react", "express", "sequelize", "sqlite"],
+  "author": "",
+  "license": "ISC"
+}
