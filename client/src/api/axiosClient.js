@@ -5,10 +5,36 @@ const apiBase = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api`
   : '/api';
 
+const isStaticHost = typeof window !== 'undefined' && (
+  window.location.hostname.includes('github.io') ||
+  window.location.hostname.includes('surge.sh') ||
+  window.location.protocol === 'file:'
+);
+
+const defaultAdapter = axios.getAdapter(axios.defaults.adapter);
+
 const api = axios.create({
   baseURL: apiBase,
   headers: {
     'Content-Type': 'application/json'
+  },
+  adapter: async (config) => {
+    // When running on GitHub Pages (static host) without a custom backend URL, bypass network entirely
+    if (isStaticHost && !import.meta.env.VITE_API_URL) {
+      try {
+        const mockRes = await handleMockRequest(config);
+        return {
+          data: mockRes.data,
+          status: mockRes.status || 200,
+          statusText: 'OK',
+          headers: {},
+          config
+        };
+      } catch (err) {
+        console.error('Local mock adapter error:', err);
+      }
+    }
+    return defaultAdapter(config);
   }
 });
 
@@ -27,13 +53,20 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // If backend is offline or on static hosting without a remote API
-    const isOfflineOrNotFound = !error.response || error.response.status === 404 || error.code === 'ERR_NETWORK';
-    if (isOfflineOrNotFound && error.config && !error.config._retryMock) {
+    // If backend is offline or returned 404, 405, or 500
+    const status = error.response?.status;
+    const isRecoverable = !error.response || status === 404 || status === 405 || status >= 500 || error.code === 'ERR_NETWORK';
+    if (isRecoverable && error.config && !error.config._retryMock) {
       try {
         error.config._retryMock = true;
         const mockRes = await handleMockRequest(error.config);
-        return mockRes;
+        return {
+          data: mockRes.data,
+          status: mockRes.status || 200,
+          statusText: 'OK',
+          headers: {},
+          config: error.config
+        };
       } catch (mockErr) {
         console.error('Mock fallback error:', mockErr);
       }
