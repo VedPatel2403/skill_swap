@@ -1,4 +1,5 @@
 // Complete Standalone Mock Service for GitHub Pages / Static Hosting
+import { pullCloudStore, pushCloudStore, mergeCloudIntoLocal } from './cloudSync.js';
 
 const DEFAULT_USERS = [
   {
@@ -224,6 +225,18 @@ export async function handleMockRequest(config) {
   const broadcasts = getStored('broadcasts', []);
   const notifications = getStored('notifications', []);
 
+  // Synchronize latest community skills and users from the cloud for cross-device visibility
+  try {
+    const cloudData = await pullCloudStore();
+    if (cloudData && Array.isArray(cloudData.skills) && cloudData.skills.length > 0) {
+      const mergedUsers = mergeCloudIntoLocal(users, cloudData);
+      users.splice(0, users.length, ...mergedUsers);
+      setStored('users', users);
+    }
+  } catch (syncErr) {
+    // Graceful offline fallback
+  }
+
   // Resolve current user from Authorization header or stored session
   let currentUser = null;
   const authHeader = config.headers?.Authorization || config.headers?.authorization;
@@ -435,17 +448,44 @@ export async function handleMockRequest(config) {
         allSkills.push({
           ...s,
           type: 'offered',
-          user: { id: u.id, name: u.name, avatar: u.avatar, location: u.location, rating: 4.9, isPublic: u.isPublic }
+          user: { id: u.id, name: u.name, avatar: u.avatar, location: u.location, rating: 4.9, isPublic: u.isPublic !== false }
         });
       });
       (u.skillsWanted || []).forEach(s => {
         allSkills.push({
           ...s,
           type: 'wanted',
-          user: { id: u.id, name: u.name, avatar: u.avatar, location: u.location, rating: 4.9, isPublic: u.isPublic }
+          user: { id: u.id, name: u.name, avatar: u.avatar, location: u.location, rating: 4.9, isPublic: u.isPublic !== false }
         });
       });
     });
+
+    // Also include any standalone cloud skills for instant cross-device visibility
+    try {
+      const cloudData = await pullCloudStore();
+      (cloudData.skills || []).forEach(cs => {
+        if (!cs || !cs.title) return;
+        const alreadyIncluded = allSkills.some(s =>
+          String(s.id) === String(cs.id) ||
+          ((s.title || '').toLowerCase() === cs.title.toLowerCase() && String(s.user?.id) === String(cs.userId || cs.user?.id))
+        );
+        if (!alreadyIncluded) {
+          allSkills.unshift({
+            ...cs,
+            status: cs.status || 'active',
+            type: cs.type || 'offered',
+            user: cs.user || {
+              id: cs.userId || Date.now(),
+              name: 'Community Member',
+              avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cs.title)}`,
+              location: 'Remote',
+              rating: 4.9,
+              isPublic: true
+            }
+          });
+        }
+      });
+    } catch (e) {}
 
     let filtered = allSkills;
     try {
@@ -532,7 +572,48 @@ export async function handleMockRequest(config) {
       isRead: false,
       createdAt: new Date().toISOString()
     });
-    setStored('notifications', notifications);
+    // Broadcast newly added skill and user to Cloud Store for cross-device visibility
+    try {
+      pullCloudStore().then(cloudData => {
+        const allCloudSkills = cloudData.skills || [];
+        const filteredCloudSkills = allCloudSkills.filter(s =>
+          !(String(s.userId || s.user?.id) === String(user.id) && s.title.toLowerCase() === newSkill.title.toLowerCase())
+        );
+        filteredCloudSkills.unshift({
+          ...newSkill,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            avatar: user.avatar,
+            location: user.location,
+            isPublic: user.isPublic !== false
+          }
+        });
+
+        const allCloudUsers = cloudData.users || [];
+        const filteredCloudUsers = allCloudUsers.filter(u => String(u.id) !== String(user.id) && u.email?.toLowerCase() !== user.email?.toLowerCase());
+        filteredCloudUsers.unshift({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          avatar: user.avatar,
+          location: user.location,
+          isPublic: user.isPublic !== false,
+          skillsOffered: user.skillsOffered || [],
+          skillsWanted: user.skillsWanted || []
+        });
+
+        pushCloudStore({
+          skills: filteredCloudSkills,
+          users: filteredCloudUsers,
+          swaps: cloudData.swaps || []
+        });
+      }).catch(e => console.warn('Cloud sync broadcast error:', e));
+    } catch (err) {
+      console.warn('Cross-device cloud broadcast note:', err);
+    }
 
     return ok({ message: 'Skill added successfully!', skill: newSkill, ...newSkill }, 201);
   }
@@ -555,6 +636,14 @@ export async function handleMockRequest(config) {
         localStorage.setItem('skillswap_user', JSON.stringify(user));
         sessionStorage.setItem('skillswap_user', JSON.stringify(user));
       } catch (e) {}
+
+      // Sync update to Cloud Store
+      try {
+        pullCloudStore().then(cloudData => {
+          const updatedSkills = (cloudData.skills || []).map(s => s.id === skillId ? { ...s, ...body } : s);
+          pushCloudStore({ ...cloudData, skills: updatedSkills });
+        }).catch(() => {});
+      } catch (e) {}
     }
     return ok({ success: true, id: skillId, skill: updatedItem });
   }
@@ -570,6 +659,14 @@ export async function handleMockRequest(config) {
       try {
         localStorage.setItem('skillswap_user', JSON.stringify(user));
         sessionStorage.setItem('skillswap_user', JSON.stringify(user));
+      } catch (e) {}
+
+      // Sync deletion to Cloud Store
+      try {
+        pullCloudStore().then(cloudData => {
+          const filteredSkills = (cloudData.skills || []).filter(s => s.id !== skillId);
+          pushCloudStore({ ...cloudData, skills: filteredSkills });
+        }).catch(() => {});
       } catch (e) {}
     }
     return ok({ success: true });
@@ -687,7 +784,25 @@ export async function handleMockRequest(config) {
   if (url.startsWith('/users/') && method === 'get') {
     const parts = url.split('/');
     const id = parts[2];
-    const target = users.find(u => String(u.id) === String(id) || (u.email && id && u.email.toLowerCase() === id.toLowerCase())) || users[1];
+    let target = users.find(u => String(u.id) === String(id) || (u.email && id && u.email.toLowerCase() === id.toLowerCase()));
+    if (!target) {
+      try {
+        const cloudData = await pullCloudStore();
+        const foundCloudUser = (cloudData.users || []).find(u => String(u.id) === String(id) || (u.email && id && u.email.toLowerCase() === id.toLowerCase()));
+        if (foundCloudUser) {
+          target = foundCloudUser;
+        } else {
+          const foundCloudSkill = (cloudData.skills || []).find(s => String(s.userId || s.user?.id) === String(id));
+          if (foundCloudSkill && foundCloudSkill.user) {
+            target = { ...foundCloudSkill.user, skillsOffered: [foundCloudSkill], skillsWanted: [] };
+          }
+        }
+      } catch (e) {}
+    }
+    if (!target) {
+      target = users[1]; // fallback to Alex Rivera
+    }
+
     const uniqueSkills = [...(target.skillsOffered || []), ...(target.skillsWanted || [])];
     const completedSwapsCount = swaps.filter(s => (String(s.requesterId) === String(target.id) || String(s.recipientId) === String(target.id)) && s.status === 'completed').length;
     return ok({
