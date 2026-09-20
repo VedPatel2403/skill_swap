@@ -94,24 +94,27 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('skillswap:saved-accounts-updated', handleSavedAccountsUpdate);
   }, []);
 
-  const fetchCurrentUser = async () => {
+  const fetchCurrentUser = async (explicitToken) => {
+    const currentToken = explicitToken !== undefined ? explicitToken : (token || localStorage.getItem('skillswap_token') || sessionStorage.getItem('skillswap_token'));
     try {
-      if (!token) {
+      if (!currentToken) {
         setUser(null);
         setLoading(false);
         return;
       }
       const response = await api.get('/auth/me');
-      const userData = response.data.user;
-      setUser(userData);
-      setPendingIncomingCount(response.data.pendingIncomingCount || 0);
+      if (response && response.data && response.data.user) {
+        const userData = response.data.user;
+        setUser(userData);
+        setPendingIncomingCount(response.data.pendingIncomingCount || 0);
 
-      // Persist to local & session storage
-      localStorage.setItem('skillswap_user', JSON.stringify(userData));
-      sessionStorage.setItem('skillswap_user', JSON.stringify(userData));
+        // Persist to local & session storage
+        localStorage.setItem('skillswap_user', JSON.stringify(userData));
+        sessionStorage.setItem('skillswap_user', JSON.stringify(userData));
 
-      // Synchronize in savedAccounts list on this device
-      saveAccountToDevice(userData, token);
+        // Synchronize in savedAccounts list on this device
+        saveAccountToDevice(userData, currentToken);
+      }
     } catch (error) {
       console.error('Error fetching current user:', error);
       if (error.response && error.response.status === 401) {
@@ -142,7 +145,6 @@ export const AuthProvider = ({ children }) => {
     saveAccountToDevice(userData, newToken);
     setToken(newToken);
     setUser(userData);
-    await fetchCurrentUser();
     window.dispatchEvent(new CustomEvent('skillswap:activity-updated'));
     return response.data;
   };
@@ -157,7 +159,6 @@ export const AuthProvider = ({ children }) => {
     saveAccountToDevice(userData, newToken);
     setToken(newToken);
     setUser(userData);
-    await fetchCurrentUser();
     window.dispatchEvent(new CustomEvent('skillswap:activity-updated'));
     return response.data;
   };
@@ -172,7 +173,6 @@ export const AuthProvider = ({ children }) => {
     saveAccountToDevice(userData, newToken);
     setToken(newToken);
     setUser(userData);
-    await fetchCurrentUser();
     window.dispatchEvent(new CustomEvent('skillswap:activity-updated'));
     return response.data;
   };
@@ -199,7 +199,6 @@ export const AuthProvider = ({ children }) => {
     saveAccountToDevice(userData, newToken);
     setToken(newToken);
     setUser(userData);
-    await fetchCurrentUser();
     window.dispatchEvent(new CustomEvent('skillswap:activity-updated'));
     return response.data;
   };
@@ -219,8 +218,8 @@ export const AuthProvider = ({ children }) => {
     const targetToken = targetAccount.token || matched?.token;
 
     if (!targetToken) {
-      // Redirect to login to authenticate this account
-      window.location.href = `/login?email=${encodeURIComponent(targetAccount.email)}&mode=add_account`;
+      // Redirect to login to authenticate this account via HashRouter
+      window.location.hash = `#/login?email=${encodeURIComponent(targetAccount.email)}&mode=add_account`;
       return;
     }
 
@@ -245,7 +244,7 @@ export const AuthProvider = ({ children }) => {
       return freshUser;
     } catch (err) {
       console.warn('Switch account token validation failed:', err);
-      window.location.href = `/login?email=${encodeURIComponent(targetAccount.email)}&mode=add_account`;
+      window.location.hash = `#/login?email=${encodeURIComponent(targetAccount.email)}&mode=add_account`;
       throw err;
     }
   };
